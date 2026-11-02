@@ -1,0 +1,51 @@
+[workspace]
+resolver = "2"
+# Explicit list: a crate joins once it builds, so a half-written crate never breaks the workspace.
+members = [
+    "crates/orca-fkey-tap",
+    "crates/orca-account-launch",
+    "crates/session-title",
+    "crates/resume-home",
+]
+
+[workspace.package]
+edition = "2021"
+publish = false
+
+[workspace.dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+libc = "0.2"
+mach2 = "0.4"
+regex = "1"
+sha2 = "0.10"
+hex = "0.4"
+plist = "1"
+ureq = { version = "2", features = ["json"] }
+tungstenite = "0.24"
+url = "2"
+tiny-skia = "0.11"
+ttf-parser = "0.25"
+image = { version = "0.25", default-features = false, features = ["png"] }
+xattr = "1"
+toml_edit = "0.22"
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
+axum = "0.8"
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+toml = "0.8"
+aes-gcm = "0.10"
+psl = "2"
+base64 = "0.22"
+rand = "0.8"
+subtle = "2"
+quick-xml = "0.37"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

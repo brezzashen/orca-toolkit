@@ -1,0 +1,5 @@
+# Codex bottom status bar. Codex accepts only built-in items here (no custom command),
+# so the all-account weekly summary lives in the Claude status line instead.
+# Installed as the [tui] status_line entry of ~/.codex/config.toml.
+[tui]
+status_line = ["model-with-reasoning", "context-remaining", "five-hour-limit", "weekly-limit", "git-branch", "current-dir"]

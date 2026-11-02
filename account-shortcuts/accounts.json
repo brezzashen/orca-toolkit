@@ -1,0 +1,46 @@
+{
+  "accounts": {
+    "A1": {
+      "title": "Orca A1 Claude Default",
+      "agent": "claude",
+      "switchCommand": "ccp default",
+      "viewMode": "chat",
+      "key": ""
+    },
+    "A2": {
+      "title": "Orca A2 Claude Work",
+      "agent": "claude",
+      "switchCommand": "ccp work",
+      "viewMode": "chat",
+      "key": ""
+    },
+    "C1": {
+      "title": "Orca C1 Codex Default",
+      "agent": "codex",
+      "switchCommand": "cxp default",
+      "viewMode": "chat",
+      "key": ""
+    },
+    "C2": {
+      "title": "Orca C2 Codex Work",
+      "agent": "codex",
+      "switchCommand": "cxp work",
+      "viewMode": "chat",
+      "key": ""
+    },
+    "G1": {
+      "title": "Orca G1 Grok",
+      "agent": "grok",
+      "switchCommand": "true",
+      "viewMode": "chat",
+      "key": ""
+    }
+  },
+  "aliases": {
+    "CL1": "A1",
+    "CL2": "A2",
+    "CO1": "C1",
+    "CO2": "C2",
+    "GO1": "G1"
+  }
+}

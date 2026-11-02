@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+set -eu
+orca_bin=${ORCA_AGENT_TEAMS_SHIM_BIN:-}
+case $orca_bin in
+  /*|[A-Za-z]:[\\/]*) ;;
+  *)
+    echo "orca agent-teams tmux shim: ORCA_AGENT_TEAMS_SHIM_BIN must be an absolute path" >&2
+    exit 127
+    ;;
+esac
+exec "$orca_bin" agent-teams-tmux "$@"

@@ -1,0 +1,14 @@
+{
+  "name": "orca-toolkit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Unofficial multi-account shortcuts, status lines and agent bridges for the Orca agent terminal on macOS",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "install:toolkit": "node scripts/install.ts",
+    "test": "node --experimental-vm-modules --test account-shortcuts/launch.test.ts account-shortcuts/runner-reaper.test.ts agent-hooks/antigravity-chat-sync.test.mjs account-shortcuts/shortcut-launch.test.mjs account-shortcuts/shortcut-runtime.test.mjs account-shortcuts/shortcut-safety.test.mjs",
+    "test:rust": "cd automation && cargo test --locked",
+    "test:title": "bun test skills/session-title/title.test.ts"
+  }
+}
