@@ -154,7 +154,15 @@ ln -sf ~/.orca/agent-hooks/orca-chat-image.mjs ~/.local/bin/orca-chat-image
 | A key or alias prints `enable Orca Chat UI before opening account tabs` | The slot uses `"viewMode": "chat"` and Orca's Chat UI is off on that Mac: turn it on in Orca Settings (search "Chat"), or set the slot's `viewMode` to `terminal`. |
 | `orca: command not found` | Run `node scripts/install.ts` again (it links `~/.local/bin/orca`) and put `~/.local/bin` on `PATH`. |
 
-Undo: `launchctl bootout gui/$(id -u)/local.orca-toolkit.fkey-tap`, the same for
-`local.orca-toolkit.antigravity-patch`, delete `~/Library/LaunchAgents/local.orca-toolkit.*.plist` and the
-account Services `install.ts` wrote under `~/Library/Services`,
-remove the `source` line from `~/.zshrc`, and restore `~/.orca/keybindings.json` from its backup.
+Undo (tested on a clean Mac):
+1. Quit Orca, then `launchctl bootout gui/$(id -u)/local.orca-toolkit.fkey-tap` and the same for
+   `local.orca-toolkit.antigravity-patch`; delete `~/Library/LaunchAgents/local.orca-toolkit.*.plist`.
+2. Restore the Services registry from the backup `install.ts` made:
+   `defaults import pbs ~/.orca/account-shortcuts/backups/<first stamp>/pbs.plist && /System/Library/CoreServices/pbs -flush`,
+   and restore `~/.orca/keybindings.json` from the `keybindings.json` beside it. Delete the
+   `~/Library/Services/Orca <ID> ….workflow` folders and `defaults delete com.stablyai.orca NSUserKeyEquivalents`.
+3. Delete `orca`, `node` (only if `install.ts` created it), `orca-account-launch`, `orca-chat-image`,
+   `orca-fkey-tap`, `resume-home` and `session-title` from `~/.local/bin`, and `~/Applications/OrcaFkeyTap.app`.
+4. The bridge locks its hook script: run `chflags nouchg ~/.orca/agent-hooks/antigravity-hook.sh` before
+   deleting `~/.orca/agent-hooks`. Remove the bridge's entries from `~/.gemini/config/hooks.json`.
+5. Remove the `source` line from `~/.zshrc`, then delete the clone.
