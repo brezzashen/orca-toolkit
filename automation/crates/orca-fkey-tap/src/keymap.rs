@@ -75,6 +75,16 @@ mod tests {
     }
 
     #[test]
+    fn shipped_template_fills_f1_to_f12() {
+        let accounts: Value =
+            serde_json::from_str(include_str!("../../../../account-shortcuts/accounts.json")).unwrap();
+        let slots = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "C1", "C2", "AG1", "AG2", "G1"];
+        for (index, id) in slots.iter().enumerate() {
+            assert_eq!(account_for_function_key(&accounts, index as u8 + 1).as_deref(), Some(*id));
+        }
+    }
+
+    #[test]
     fn resolves_primary_and_extra_plain_function_keys() {
         let accounts = json!({
             "accounts": {

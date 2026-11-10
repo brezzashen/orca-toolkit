@@ -14,33 +14,91 @@
       "viewMode": "chat",
       "key": ""
     },
+    "A3": {
+      "title": "Orca A3 Claude Team 1",
+      "agent": "claude",
+      "switchCommand": "ccp team1",
+      "viewMode": "chat",
+      "key": ""
+    },
+    "A4": {
+      "title": "Orca A4 Claude Team 2",
+      "agent": "claude",
+      "switchCommand": "ccp team2",
+      "viewMode": "chat",
+      "key": ""
+    },
+    "A5": {
+      "title": "Orca A5 Claude Team 3",
+      "agent": "claude",
+      "switchCommand": "ccp team3",
+      "viewMode": "chat",
+      "key": ""
+    },
+    "A6": {
+      "title": "Orca A6 Claude Team 4",
+      "agent": "claude",
+      "switchCommand": "ccp team4",
+      "viewMode": "chat",
+      "key": ""
+    },
+    "A7": {
+      "title": "Orca A7 Claude Team 5",
+      "agent": "claude",
+      "switchCommand": "ccp team5",
+      "viewMode": "chat",
+      "key": ""
+    },
     "C1": {
       "title": "Orca C1 Codex Default",
       "agent": "codex",
       "switchCommand": "cxp default",
       "viewMode": "chat",
-      "key": ""
+      "key": ""
     },
     "C2": {
       "title": "Orca C2 Codex Work",
       "agent": "codex",
       "switchCommand": "cxp work",
       "viewMode": "chat",
-      "key": ""
+      "key": ""
+    },
+    "AG1": {
+      "title": "Orca AG1 Antigravity",
+      "agent": "antigravity",
+      "command": "agy",
+      "switchCommand": "true",
+      "viewMode": "terminal",
+      "key": ""
+    },
+    "AG2": {
+      "title": "Orca AG2 Antigravity Work",
+      "agent": "antigravity",
+      "command": "agy-work",
+      "switchCommand": "export AG2_ACCOUNT=work",
+      "viewMode": "terminal",
+      "key": ""
     },
     "G1": {
       "title": "Orca G1 Grok",
       "agent": "grok",
       "switchCommand": "true",
       "viewMode": "chat",
-      "key": ""
+      "key": ""
     }
   },
   "aliases": {
     "CL1": "A1",
     "CL2": "A2",
+    "CL3": "A3",
+    "CL4": "A4",
+    "CL5": "A5",
+    "CL6": "A6",
+    "CL7": "A7",
     "CO1": "C1",
     "CO2": "C2",
+    "AG1": "AG1",
+    "AG2": "AG2",
     "GO1": "G1"
   }
 }

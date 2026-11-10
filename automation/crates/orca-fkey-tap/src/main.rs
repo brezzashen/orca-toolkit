@@ -1,4 +1,4 @@
-//! orca-fkey-tap: lets the Orca account function keys (F1-F9) open a new account terminal while a
+//! orca-fkey-tap: lets the Orca account function keys (F1-F12) open a new account terminal while a
 //! terminal has focus, run by `~/Library/LaunchAgents/local.orca-toolkit.fkey-tap.plist`.
 //!
 //! The keys are macOS Services scoped to Orca (`~/.orca/account-shortcuts/install.ts`). A Service

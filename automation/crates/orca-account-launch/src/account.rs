@@ -125,6 +125,25 @@ mod tests {
         assert_eq!(a.shell_command("--foo"), "exec 'codex' --no-daemon --foo");
     }
     #[test]
+    fn shipped_template_resolves_all_twelve_slots() {
+        let c: Value =
+            serde_json::from_str(include_str!("../../../../account-shortcuts/accounts.json")).unwrap();
+        let home = Path::new("/Users/test");
+        let ids = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "C1", "C2", "AG1", "AG2", "G1"];
+        assert_eq!(c["accounts"].as_object().unwrap().len(), ids.len());
+        for id in ids {
+            assert_eq!(resolve(&c, id, home).unwrap().id, id);
+        }
+        let claude = resolve(&c, "cl3", home).unwrap();
+        assert_eq!(claude.id, "A3");
+        assert_eq!(claude.set["CLAUDE_CONFIG_DIR"], "/Users/test/.claude-profiles/team1");
+        let antigravity = resolve(&c, "ag1", home).unwrap();
+        assert_eq!((antigravity.command.as_str(), antigravity.view_mode.as_str()), ("agy", "terminal"));
+        let second = resolve(&c, "AG2", home).unwrap();
+        assert_eq!(second.command, "agy-work");
+        assert_eq!(second.set["AG2_ACCOUNT"], "work");
+    }
+    #[test]
     fn primary_profile_removes_inherited_secondary_account() {
         let c = json!({"accounts":{"A1":{"agent":"claude","switchCommand":"ccp admin"}}});
         assert_eq!(

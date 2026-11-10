@@ -1,6 +1,7 @@
 # Visible-workspace account shortcuts
 
-Function keys map to the account IDs in `accounts.json` (A1, A2, C1, C2, G1 in the template).
+Function keys map to the account IDs in `accounts.json`. The template fills F1-F12:
+A1-A7 (Claude Code), C1 and C2 (Codex), AG1 and AG2 (Antigravity), G1 (Grok).
 The execution host is selected by the workspace on screen, never by the account.
 
 `orca-fkey-tap` and macOS Services invoke `orca-account-launch --from-shortcut`.

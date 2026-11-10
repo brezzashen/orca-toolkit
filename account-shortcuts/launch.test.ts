@@ -118,7 +118,8 @@ for (const alias of Object.keys(config.aliases)) {
         assert.equal(creations[0].params.select, true);
         // 'host' left a remote-controlling desktop on its old tab.
         assert.equal(creations[0].params.navigation, 'all');
-        assert.equal(creations[0].params.viewMode, 'chat');
+        // Antigravity slots open in the terminal view; every other template account in the Chat UI.
+        assert.equal(creations[0].params.viewMode, account.viewMode);
         assert.equal(focuses.length, 1);
         assert.equal(focuses[0].params.terminal, 'created');
       } else {

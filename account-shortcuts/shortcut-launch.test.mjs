@@ -41,6 +41,19 @@ for (const [index, id] of Object.keys(config.accounts).entries()) {
   });
 }
 
+test('the template fills F1-F12 and the shell defines every alias a key types', () => {
+  assert.deepEqual(Object.keys(config.accounts), ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'C1', 'C2', 'AG1', 'AG2', 'G1']);
+  const shell = readFileSync(new URL('../shell/orca.zsh', import.meta.url), 'utf8');
+  const defined = shell.match(/^_orca_aliases=\(([^)]*)\)$/m)[1].split(/\s+/);
+  assert.deepEqual([...defined].sort(), Object.keys(config.aliases).sort());
+  for (const [id, account] of Object.entries(config.accounts)) {
+    const { alias } = accountCommand(config, id);
+    assert.ok(defined.includes(alias.toUpperCase()), `${id}: ${alias} is not a shell alias`);
+    // A key types the alias; an alias named like the executable would call itself.
+    assert.notEqual(alias, account.command ?? account.agent, `${id}: alias equals its command`);
+  }
+});
+
 test('F2 on a local workspace sends only the cl2 alias, never the probing fallback', async () => {
   const launch = accountCommand(config, 'A2');
   let pressed = false;

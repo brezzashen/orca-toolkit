@@ -2,8 +2,11 @@
 # Type these in an Orca terminal to run the per-account agent in that same terminal.
 # Typed launches preserve the current tab and focus, including on the Orca phone client.
 # Append --new-tab to explicitly open and focus another tab without closing the caller.
-# Aliases come from account-shortcuts/accounts.json (CL1, CL2, CO1, CO2, GO1 in the template);
-# edit _orca_aliases below when you add accounts there.
+# Aliases come from account-shortcuts/accounts.json. The template fills F1-F12:
+#   CL1-CL7 -> Claude Code A1-A7 (F1-F7)      CO1, CO2 -> Codex C1, C2 (F8, F9)
+#   AG1, AG2 -> Antigravity (F10, F11)        GO1 -> Grok (F12)
+# Edit _orca_aliases below when you add or remove accounts there. An alias must never equal its
+# account's `command` (ag1 runs agy): the launcher's shell would call the alias again.
 #   ccp <profile> / cxp <profile> select a Claude Code / Codex profile in this shell:
 #   "default" uses ~/.claude or ~/.codex, any other name ~/.claude-profiles/<name> or ~/.codex-profiles/<name>.
 ccp() {
@@ -19,7 +22,7 @@ orca_account_tab() {
     "$HOME/.local/bin/node" "$HOME/.orca/account-shortcuts/launch.ts" "$@"
   fi
 }
-_orca_aliases=(CL1 CL2 CO1 CO2 GO1)
+_orca_aliases=(CL1 CL2 CL3 CL4 CL5 CL6 CL7 CO1 CO2 AG1 AG2 GO1)
 for _orca_alias in $_orca_aliases; do
   eval "${_orca_alias}() { orca_account_tab ${_orca_alias} \"\$@\"; }"
   eval "${_orca_alias:l}() { orca_account_tab ${_orca_alias} \"\$@\"; }"
