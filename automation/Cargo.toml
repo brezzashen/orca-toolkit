@@ -6,6 +6,7 @@ members = [
     "crates/orca-account-launch",
     "crates/session-title",
     "crates/resume-home",
+    "crates/orca-ghost-tabs",
 ]
 
 [workspace.package]

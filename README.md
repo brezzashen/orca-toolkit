@@ -9,6 +9,7 @@ several Claude Code / Codex / Grok accounts side by side. Not affiliated with Or
 | `automation/crates/orca-account-launch` | Rust launcher behind those aliases, Services and keys. |
 | `automation/crates/orca-fkey-tap` | Event tap so plain F-keys work even while a terminal has focus. |
 | `automation/crates/resume-home` | `Cmd+Shift+T` reopen: resumes the closed tab's agent session under the account that owns it. |
+| [`automation/crates/orca-ghost-tabs`](automation/crates/orca-ghost-tabs/README.md) | Opt-in workaround for [orca#40683](https://github.com/stablyai/orca/issues/40683): drops a paired client's leftover mirror of a tab the host already closed. |
 | `automation/crates/session-title`, [`skills/session-title/`](skills/session-title/SKILL.md) | Names Claude Code / Codex sessions and their Orca tabs. |
 | [`statusline/`](statusline/README.md) | Claude Code status line: model, context, 5-hour and weekly quota bars; Codex `[tui]` line. |
 | `agent-hooks/` | Antigravity CLI → Orca Chat UI transcript bridge, and `orca-chat-image` to attach images to the Chat UI. |
