@@ -14,6 +14,7 @@ several Claude Code / Codex / Grok accounts side by side. Not affiliated with Or
 | [`statusline/`](statusline/README.md) | Claude Code status line: model, context, 5-hour and weekly quota bars; Codex `[tui]` line. |
 | `agent-hooks/` | Antigravity CLI → Orca Chat UI transcript bridge, and `orca-chat-image` to attach images to the Chat UI. |
 | `integrations/` | Orca status plugins for the pi agent and OpenCode. |
+| [Account Keys](https://github.com/brezzashen/BrezzaOrca) (separate repo) | Orca plugin: twelve account slots (`Alt+F1`–`Alt+F12`, palette, sidebar panel) that open a new tab per account in the focused workspace. Install from Git: `https://github.com/brezzashen/BrezzaOrca.git#v0.1.4`. |
 | `shell/orca.zsh` | Typed aliases, `ccp`/`cxp` profile switches, OSC 52 clipboard and fast pane close for Orca shells. |
 
 中文简介：Orca（AI 编码代理终端）的非官方多账号扩展。一个按键或别名就能在新标签里启动指定的
