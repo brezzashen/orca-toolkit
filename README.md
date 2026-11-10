@@ -1,6 +1,6 @@
 # Orca Toolkit
 
-Unofficial add-ons for the [Orca](https://orca.stably.ai) agent terminal on macOS, for people who run
+Unofficial add-ons for the [Orca](https://orca.dev) agent terminal on macOS, for people who run
 several Claude Code / Codex / Antigravity / Grok accounts side by side. Not affiliated with Orca or Stably.
 
 ## Start here: three remote workflows
@@ -36,7 +36,7 @@ Claude Code / Codex / Antigravity / Grok 账号（模板把 12 个账号排在 F
 
 ## Requirements
 
-macOS, [Orca](https://orca.stably.ai) installed at `/Applications/Orca.app`, Node 22.18+, zsh,
+macOS, [Orca](https://orca.dev) installed at `/Applications/Orca.app`, Node 22.18+, zsh,
 and Rust (`cargo`) for the native launchers. Claude Code / Codex / Antigravity (`agy`) / Grok CLIs for the accounts you use.
 
 ## Install
