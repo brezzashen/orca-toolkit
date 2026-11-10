@@ -46,7 +46,9 @@ git clone https://github.com/brezzashen/orca-toolkit.git ~/orca-toolkit
 cd ~/orca-toolkit && npm test
 ```
 Check: `npm test` ends with `fail 0`. Requirements: macOS, `/Applications/Orca.app`, Node 22.18+, zsh,
-and Rust (`cargo`) for the native programs (`rustup` if it is missing). Never edit files in the
+Rust (`cargo`, install with `curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal` when it is
+missing, then `. ~/.cargo/env`) and the Xcode command line tools (`xcode-select --install`) for the
+native programs. Start Orca once before Phase 5 (`open -g -a Orca`). Never edit files in the
 repository to configure accounts: its tests pin the template, and `git pull` keeps working.
 
 ## Phase 2: choose the accounts (host; a client copies the host's choice)
@@ -73,7 +75,9 @@ node scripts/install.ts --dry-run --rust --fkey-tap --services --statusline   # 
 node scripts/install.ts --rust --fkey-tap --services --statusline
 ```
 The installer prints the exact `source …/shell/orca.zsh` line for this clone: append it to `~/.zshrc`
-unless it is there. With `--statusline` it also prints a `statusLine` entry: merge it into
+unless it is there. It also links `~/.local/bin/orca` to the CLI inside Orca.app; if `~/.local/bin` is not on
+`PATH`, add `export PATH="$HOME/.local/bin:$PATH"` to `~/.zshrc` as well. On Node 22–23 every script prints an
+`ExperimentalWarning` about type stripping: it is harmless. With `--statusline` it also prints a `statusLine` entry: merge it into
 `~/.claude/settings.json` with a JSON-aware edit after backing that file up. `--statusline` is optional.
 
 Now write the chosen accounts into the installed copy `~/.orca/account-shortcuts/accounts.json`
@@ -122,7 +126,8 @@ node ~/.orca/agent-hooks/antigravity-chat-sync.mjs --bootstrap
 node ~/.orca/agent-hooks/antigravity-chat-sync.mjs --patch-orca --force    # prints {"ok":true}
 ln -sf ~/.orca/agent-hooks/orca-chat-image.mjs ~/.local/bin/orca-chat-image
 ```
-Re-run the `--patch-orca --force` line after every Orca update.
+`--bootstrap` prints nothing on success; on a Mac without Antigravity it still writes
+`~/.gemini/config/hooks.json`, which is harmless. Re-run the `--patch-orca --force` line after every Orca update.
 
 ## Phase 6: verify with the user
 
@@ -146,6 +151,8 @@ Re-run the `--patch-orca --force` line after every Orca update.
 | New tab opens the wrong account | `switchCommand` points at the wrong profile; fix `accounts.json` on the host and copy it to `~/.orca/account-shortcuts/`. |
 | "Local attachments are not available for remote sessions" | The bridge is not injected on this client, often after an Orca update: re-run Phase 5. |
 | Paste works on the host but not from a phone or browser | Run Phase 5 on the host as well. |
+| A key or alias prints `enable Orca Chat UI before opening account tabs` | The slot uses `"viewMode": "chat"` and Orca's Chat UI is off on that Mac: turn it on in Orca Settings (search "Chat"), or set the slot's `viewMode` to `terminal`. |
+| `orca: command not found` | Run `node scripts/install.ts` again (it links `~/.local/bin/orca`) and put `~/.local/bin` on `PATH`. |
 
 Undo: `launchctl bootout gui/$(id -u)/local.orca-toolkit.fkey-tap`, the same for
 `local.orca-toolkit.antigravity-patch`, delete `~/Library/LaunchAgents/local.orca-toolkit.*.plist` and the

@@ -3,7 +3,7 @@
 // Without flags it only copies the account shortcuts and links ~/.local/bin/node. Nothing is
 // overwritten without a backup, and an existing ~/.orca/account-shortcuts/accounts.json is kept.
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, symlinkSync, writeFileSync, lstatSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readlinkSync, renameSync, symlinkSync, unlinkSync, writeFileSync, lstatSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,9 +34,28 @@ step(`copy account-shortcuts -> ${shortcuts}`, () => {
 const nodeLink = join(home, '.local/bin/node');
 let hasNode = false;
 try { lstatSync(nodeLink); hasNode = true; } catch {}
-if (!hasNode) step(`link ${nodeLink} -> ${process.execPath}`, () => {
+// An older install may point at a versioned Homebrew Cellar folder; repoint that one only.
+let nodeTarget = '';
+try { nodeTarget = readlinkSync(nodeLink, { encoding: 'utf8' }); } catch {}
+if (/\/Cellar\//.test(nodeTarget)) {
+  step(`unlink stale ${nodeLink} -> ${nodeTarget}`, () => unlinkSync(nodeLink));
+  hasNode = false;
+}
+// Prefer a stable PATH entry (Homebrew's /opt/homebrew/bin/node) over process.execPath, which
+// resolves into a versioned Cellar folder that the next `brew upgrade` deletes.
+const stableNode = ['/opt/homebrew/bin/node', '/usr/local/bin/node'].find((p) => existsSync(p)) ?? process.execPath;
+if (!hasNode) step(`link ${nodeLink} -> ${stableNode}`, () => {
   mkdirSync(join(home, '.local/bin'), { recursive: true });
-  symlinkSync(process.execPath, nodeLink);
+  symlinkSync(stableNode, nodeLink);
+});
+// The Orca CLI ships inside the app; link it so `orca` works in any shell.
+const orcaCli = '/Applications/Orca.app/Contents/Resources/bin/orca';
+const orcaLink = join(home, '.local/bin/orca');
+let hasOrca = false;
+try { lstatSync(orcaLink); hasOrca = true; } catch {}
+if (!hasOrca && existsSync(orcaCli)) step(`link ${orcaLink} -> ${orcaCli}`, () => {
+  mkdirSync(join(home, '.local/bin'), { recursive: true });
+  symlinkSync(orcaCli, orcaLink);
 });
 
 // 3. Rust programs into ~/.local/bin.

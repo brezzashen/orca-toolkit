@@ -39,6 +39,8 @@ check(major > 22 || (major === 22 && minor >= 18), `Node ${process.versions.node
 const orcaVersion = run('/usr/bin/defaults', ['read', '/Applications/Orca.app/Contents/Info.plist', 'CFBundleShortVersionString'])?.trim();
 check(Boolean(orcaVersion), `Orca.app ${orcaVersion ?? 'missing'}`, 'Install Orca from https://orca.dev into /Applications.');
 check(existsSync(join(home, '.local/bin/node')), '~/.local/bin/node (the launchers start it)', 'node scripts/install.ts');
+check((process.env.PATH ?? '').split(':').includes(join(home, '.local/bin')), '~/.local/bin on PATH (orca, orca-chat-image, the launchers)',
+  "echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.zshrc, then open a new terminal");
 
 // 2. Accounts and the F-key map.
 const accountsPath = join(home, '.orca/account-shortcuts/accounts.json');
@@ -100,7 +102,9 @@ note(`last remote image upload: ${lastUpload ? lastUpload.slice(0, 160) : 'none 
 
 // 6. Pairing.
 if (client) {
-  const envs = run('orca', ['environment', 'list', '--json']);
+  // A fresh Orca install does not put its CLI on PATH; fall back to the copy inside the app.
+  const orcaBin = run('/bin/zsh', ['-lc', 'command -v orca'])?.trim() || '/Applications/Orca.app/Contents/Resources/bin/orca';
+  const envs = run(orcaBin, ['environment', 'list', '--json']);
   let names: string[] = [];
   try { names = (JSON.parse(envs ?? '{}').result?.environments ?? []).map((e: any) => e.name); } catch {}
   check(names.length > 0, `paired hosts: ${names.join(', ') || 'none'}`,
