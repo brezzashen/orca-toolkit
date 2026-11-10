@@ -5,63 +5,63 @@
       "agent": "claude",
       "switchCommand": "ccp default",
       "viewMode": "chat",
-      "key": ""
+      "key": "\uF704"
     },
     "A2": {
       "title": "Orca A2 Claude Work",
       "agent": "claude",
       "switchCommand": "ccp work",
       "viewMode": "chat",
-      "key": ""
+      "key": "\uF705"
     },
     "A3": {
       "title": "Orca A3 Claude Team 1",
       "agent": "claude",
       "switchCommand": "ccp team1",
       "viewMode": "chat",
-      "key": ""
+      "key": "\uF706"
     },
     "A4": {
       "title": "Orca A4 Claude Team 2",
       "agent": "claude",
       "switchCommand": "ccp team2",
       "viewMode": "chat",
-      "key": ""
+      "key": "\uF707"
     },
     "A5": {
       "title": "Orca A5 Claude Team 3",
       "agent": "claude",
       "switchCommand": "ccp team3",
       "viewMode": "chat",
-      "key": ""
+      "key": "\uF708"
     },
     "A6": {
       "title": "Orca A6 Claude Team 4",
       "agent": "claude",
       "switchCommand": "ccp team4",
       "viewMode": "chat",
-      "key": ""
+      "key": "\uF709"
     },
     "A7": {
       "title": "Orca A7 Claude Team 5",
       "agent": "claude",
       "switchCommand": "ccp team5",
       "viewMode": "chat",
-      "key": ""
+      "key": "\uF70A"
     },
     "C1": {
       "title": "Orca C1 Codex Default",
       "agent": "codex",
       "switchCommand": "cxp default",
       "viewMode": "chat",
-      "key": ""
+      "key": "\uF70B"
     },
     "C2": {
       "title": "Orca C2 Codex Work",
       "agent": "codex",
       "switchCommand": "cxp work",
       "viewMode": "chat",
-      "key": ""
+      "key": "\uF70C"
     },
     "AG1": {
       "title": "Orca AG1 Antigravity",
@@ -69,7 +69,7 @@
       "command": "agy",
       "switchCommand": "true",
       "viewMode": "terminal",
-      "key": ""
+      "key": "\uF70D"
     },
     "AG2": {
       "title": "Orca AG2 Antigravity Work",
@@ -77,14 +77,14 @@
       "command": "agy-work",
       "switchCommand": "export AG2_ACCOUNT=work",
       "viewMode": "terminal",
-      "key": ""
+      "key": "\uF70E"
     },
     "G1": {
       "title": "Orca G1 Grok",
       "agent": "grok",
       "switchCommand": "true",
       "viewMode": "chat",
-      "key": ""
+      "key": "\uF70F"
     }
   },
   "aliases": {

@@ -8,6 +8,9 @@ use serde_json::Value;
 /// The bare account alias plus the Chat flag, e.g. `cl5 --chat`. This Mac's shell defines every
 /// alias, so a local tab never needs the probing fallback that sparse remote hosts use.
 pub fn local_command(config: &Value, requested: &str) -> Result<String> {
+    if requested.eq_ignore_ascii_case("REOPEN") || requested.eq_ignore_ascii_case("--REOPEN") {
+        return Ok("orca_reopen_tab".into());
+    }
     let name = requested.to_uppercase();
     let aliases = config["aliases"].as_object();
     let id = aliases.and_then(|map| map.get(&name)).and_then(Value::as_str).unwrap_or(&name);
@@ -72,6 +75,7 @@ mod tests {
         assert_eq!(local_command(&config, "A5").unwrap(), "cl5 --chat");
         assert_eq!(local_command(&config, "cl5").unwrap(), "cl5 --chat");
         assert_eq!(local_command(&config, "C2").unwrap(), "co2");
+        assert_eq!(local_command(&config, "REOPEN").unwrap(), "orca_reopen_tab");
         assert!(local_command(&config, "X9").is_err());
         assert!(local_command(&config, "ZZ").is_err());
     }

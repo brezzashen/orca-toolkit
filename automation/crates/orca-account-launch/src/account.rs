@@ -93,6 +93,20 @@ impl Account {
         };
         format!("exec {}{isolation} {args}", quote(&self.command))
     }
+    /// The agent's argv when `args` holds only plain words; `None` means it needs shell parsing.
+    pub fn argv(&self, args: &str) -> Option<Vec<String>> {
+        let plain = |w: &str| w.chars().all(|c| c.is_ascii_alphanumeric() || "-_=.,:/@+%".contains(c));
+        let words: Vec<&str> = args.split_whitespace().collect();
+        if !words.iter().all(|w| plain(w)) {
+            return None;
+        }
+        let mut argv = vec![self.command.clone()];
+        if self.agent == "codex" {
+            argv.push("--no-daemon".into());
+        }
+        argv.extend(words.into_iter().map(String::from));
+        Some(argv)
+    }
     pub fn apply(&self, command: &mut Command) {
         for key in &self.unset {
             command.env_remove(key);
@@ -118,13 +132,6 @@ mod tests {
     use super::*;
     use serde_json::json;
     #[test]
-    fn aliases_choose_isolated_profiles_without_auth_command() {
-        let c = json!({"aliases":{"CO2":"C2"},"accounts":{"C2":{"agent":"codex","switchCommand":"cxp work"}}});
-        let a = resolve(&c, "co2", Path::new("/Users/test")).unwrap();
-        assert_eq!(a.set["CODEX_HOME"], "/Users/test/.codex-profiles/work");
-        assert_eq!(a.shell_command("--foo"), "exec 'codex' --no-daemon --foo");
-    }
-    #[test]
     fn shipped_template_resolves_all_twelve_slots() {
         let c: Value =
             serde_json::from_str(include_str!("../../../../account-shortcuts/accounts.json")).unwrap();
@@ -144,6 +151,13 @@ mod tests {
         assert_eq!(second.set["AG2_ACCOUNT"], "work");
     }
     #[test]
+    fn aliases_choose_isolated_profiles_without_auth_command() {
+        let c = json!({"aliases":{"CO2":"C2"},"accounts":{"C2":{"agent":"codex","switchCommand":"cxp work"}}});
+        let a = resolve(&c, "co2", Path::new("/Users/test")).unwrap();
+        assert_eq!(a.set["CODEX_HOME"], "/Users/test/.codex-profiles/work");
+        assert_eq!(a.shell_command("--foo"), "exec 'codex' --no-daemon --foo");
+    }
+    #[test]
     fn primary_profile_removes_inherited_secondary_account() {
         let c = json!({"accounts":{"A1":{"agent":"claude","switchCommand":"ccp admin"}}});
         assert_eq!(
@@ -156,6 +170,20 @@ mod tests {
         for switch in ["ccp ../admin", "curl example.com | sh"] {
             let c = json!({"accounts":{"A1":{"agent":"claude","switchCommand":switch}}});
             assert!(resolve(&c, "A1", Path::new("/tmp")).is_err());
+        }
+    }
+    #[test]
+    fn plain_arguments_exec_directly_and_quoted_ones_need_a_shell() {
+        let c = json!({"accounts":{"C1":{"agent":"codex","switchCommand":"cxp main"},"A1":{"agent":"claude","switchCommand":"ccp admin"}}});
+        let codex = resolve(&c, "C1", Path::new("/tmp")).unwrap();
+        assert_eq!(
+            codex.argv("--dangerously-bypass-approvals-and-sandbox").unwrap(),
+            ["codex", "--no-daemon", "--dangerously-bypass-approvals-and-sandbox"]
+        );
+        let claude = resolve(&c, "A1", Path::new("/tmp")).unwrap();
+        assert_eq!(claude.argv("").unwrap(), ["claude"]);
+        for shell in ["--allow \"*\"", "--x $(id)", "--a;b", "--a 'b c'"] {
+            assert!(claude.argv(shell).is_none(), "{shell}");
         }
     }
     #[test]

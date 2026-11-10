@@ -41,14 +41,19 @@ impl Rpc {
     }
 
     pub fn call(&self, method: &str, params: Value) -> Result<Value> {
+        self.call_within(method, params, Duration::from_secs(15))
+    }
+
+    /// `call` with a caller-chosen deadline; read-only lookups on a latency path use a short one.
+    pub fn call_within(&self, method: &str, params: Value, limit: Duration) -> Result<Value> {
         let mut stream = UnixStream::connect(&self.socket).context("connect local Orca")?;
-        stream.set_write_timeout(Some(Duration::from_secs(2)))?;
+        stream.set_write_timeout(Some(limit.min(Duration::from_secs(2))))?;
         let id = format!("account-{}-{}", std::process::id(), NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed));
         let request = json!({"id":id,"authToken":self.token,"method":method,"params":params});
         writeln!(stream, "{request}")?;
         stream.set_nonblocking(true)?;
         let mut pending = Vec::new();
-        let deadline = std::time::Instant::now() + Duration::from_secs(15);
+        let deadline = std::time::Instant::now() + limit;
         loop {
             if std::time::Instant::now() >= deadline {
                 bail!("local Orca {method} timed out; request is not retried");

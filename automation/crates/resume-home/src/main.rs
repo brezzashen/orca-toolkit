@@ -216,9 +216,9 @@ fn main() -> ExitCode {
     let agent = match text.next().as_deref() {
         Some("claude") => Agent::Claude,
         Some("codex") => Agent::Codex,
-        Some("reopen") => return reopen::run(),
+        Some("reopen") => return reopen::run(text.any(|a| a == "--latest")),
         _ => {
-            eprintln!("usage: resume-home <claude|codex> -- <agent args...> | resume-home reopen");
+            eprintln!("usage: resume-home <claude|codex> -- <agent args...> | resume-home reopen [--latest]");
             return ExitCode::from(2);
         }
     };

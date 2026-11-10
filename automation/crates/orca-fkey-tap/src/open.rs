@@ -9,6 +9,7 @@
 //! there while this Mac keeps being polled; one chord opens one tab, so only one side can win.
 
 use crate::account::{self, Chord};
+use crate::claims::Claims;
 use crate::orca_rpc::Rpc;
 use crate::remote;
 use anyhow::{bail, Context, Result};
@@ -17,19 +18,22 @@ use std::collections::HashSet;
 use std::ffi::c_void;
 use std::fs::{File, OpenOptions};
 use std::os::unix::fs::OpenOptionsExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Child;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const DISCOVER_DEADLINE: Duration = Duration::from_secs(30);
 const DISCOVER_INTERVAL: Duration = Duration::from_millis(10);
 const REMOTE_HANDOFF: Duration = Duration::from_millis(700);
+const PAIRED_FAILURE_GRACE: Duration = Duration::from_secs(1);
+const NATIVE_REOPEN_WAIT: Duration = Duration::from_millis(180);
 const LOCK_WAIT: Duration = Duration::from_secs(2);
 const DELIVERY_CHECK_DELAYS_MS: [u64; 4] = [100, 250, 500, 1_000];
 const HID_EVENT_TAP: u32 = 0;
 
 #[link(name = "CoreGraphics", kind = "framework")]
 extern "C" {
+    fn CGEventSourceCreate(state_id: i32) -> *mut c_void;
     fn CGEventCreateKeyboardEvent(source: *const c_void, key: u16, down: bool) -> *mut c_void;
     fn CGEventSetFlags(event: *mut c_void, flags: u64);
     fn CGEventPost(tap: u32, event: *mut c_void);
@@ -40,6 +44,25 @@ extern "C" {
     fn CFRelease(value: *const c_void);
 }
 
+/// Ties a launch to the press gate (`gate.rs`): `cancelled` turns true once a newer press
+/// supersedes this one, and `found` marks the terminal as found so it can no longer be superseded.
+pub struct Control<'a> {
+    pub cancelled: &'a dyn Fn() -> bool,
+    pub found: &'a dyn Fn(),
+}
+
+/// A newer press took over before this launch found its terminal; not a failure worth a banner.
+#[derive(Debug)]
+pub struct Superseded;
+
+impl std::fmt::Display for Superseded {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("superseded by a newer press")
+    }
+}
+
+impl std::error::Error for Superseded {}
+
 pub struct Timing {
     pub terminal: String,
     pub prepare_ms: u128,
@@ -48,7 +71,7 @@ pub struct Timing {
 }
 
 /// Runs one launch; `frontmost` re-checks Orca after the lock, right before the chord.
-pub fn run(home: &Path, id: &str, frontmost: impl Fn() -> bool) -> Result<Timing> {
+pub fn run(home: &Path, id: &str, frontmost: impl Fn() -> bool, control: &Control) -> Result<Timing> {
     let started = Instant::now();
     let dir = home.join(".orca/account-shortcuts");
     let _lock = acquire_lock(&dir.join("runtime"))?;
@@ -64,9 +87,12 @@ pub fn run(home: &Path, id: &str, frontmost: impl Fn() -> bool) -> Result<Timing
     let pressed = Instant::now();
     let pressed_epoch_ms = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
     let claims_path = dir.join("runtime/claimed-terminals.json");
-    let search = Search { home, id, pressed_epoch_ms, paired: remote::has_paired_hosts(home) };
-    let terminal = match discover(&rpc, &baseline, &Claims::load(&claims_path)?, &chord, &search)? {
-        Found::Local(terminal) => terminal,
+    let search = Search { home, id, pressed_epoch_ms, paired: remote::has_paired_hosts(home), handoff: REMOTE_HANDOFF };
+    let terminal = match discover(&rpc, &baseline, &Claims::load(&claims_path)?, &chord, &search, control)? {
+        Found::Local(terminal) => {
+            (control.found)();
+            terminal
+        }
         Found::Remote => {
             let found = pressed.elapsed().as_millis();
             return Ok(Timing { terminal: "paired-host".into(), prepare_ms: pressed.duration_since(started).as_millis(), discover_ms: found, send_ms: 0 });
@@ -76,6 +102,65 @@ pub fn run(home: &Path, id: &str, frontmost: impl Fn() -> bool) -> Result<Timing
     Claims::load(&claims_path)?.claim(&terminal)?;
     let found = Instant::now();
     send(&rpc, &terminal, &command)?;
+    Ok(Timing {
+        terminal,
+        prepare_ms: pressed.duration_since(started).as_millis(),
+        discover_ms: found.duration_since(pressed).as_millis(),
+        send_ms: found.elapsed().as_millis(),
+    })
+}
+
+/// Completes `Shift+Cmd+T` when Orca's native `tab.reopenClosed` refuses a paired remote workspace.
+pub fn run_reopen(home: &Path, pressed_epoch_ms: u64, frontmost: impl Fn() -> bool, control: &Control) -> Result<Timing> {
+    let started = Instant::now();
+    if !remote::has_paired_hosts(home) {
+        return Ok(Timing { terminal: "native-local".into(), prepare_ms: 0, discover_ms: 0, send_ms: 0 });
+    }
+    let dir = home.join(".orca/account-shortcuts");
+    let _lock = acquire_lock(&dir.join("runtime"))?;
+    let rpc = Rpc::local(home)?;
+    let claims_path = dir.join("runtime/claimed-terminals.json");
+    let baseline: HashSet<String> = terminals(&rpc)?.iter().filter_map(handle).collect();
+    let wait_started = Instant::now();
+    while wait_started.elapsed() < NATIVE_REOPEN_WAIT {
+        if (control.cancelled)() {
+            return Err(Superseded.into());
+        }
+        if let Ok(current) = terminals(&rpc) {
+            let claims = Claims::load(&claims_path)?;
+            if let Some(found) = pick_native_reopened(&current, &baseline, &claims, pressed_epoch_ms) {
+                Claims::load(&claims_path)?.claim(&found)?;
+                return Ok(Timing {
+                    terminal: format!("native:{found}"),
+                    prepare_ms: wait_started.duration_since(started).as_millis(),
+                    discover_ms: wait_started.elapsed().as_millis(),
+                    send_ms: 0,
+                });
+            }
+        }
+        std::thread::sleep(DISCOVER_INTERVAL);
+    }
+    let chord = account::terminal_chord(&read_json(&home.join(".orca/keybindings.json"))?)?;
+    if !frontmost() {
+        bail!("Orca is no longer frontmost; no tab was reopened");
+    }
+    press(&chord);
+    let pressed = Instant::now();
+    let chord_epoch_ms = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+    let search = Search { home, id: "REOPEN", pressed_epoch_ms: chord_epoch_ms, paired: true, handoff: Duration::ZERO };
+    let terminal = match discover(&rpc, &baseline, &Claims::load(&claims_path)?, &chord, &search, control)? {
+        Found::Local(terminal) => {
+            (control.found)();
+            terminal
+        }
+        Found::Remote => {
+            let found = pressed.elapsed().as_millis();
+            return Ok(Timing { terminal: "paired-host".into(), prepare_ms: pressed.duration_since(started).as_millis(), discover_ms: found, send_ms: 0 });
+        }
+    };
+    Claims::load(&claims_path)?.claim(&terminal)?;
+    let found = Instant::now();
+    send(&rpc, &terminal, "orca_reopen_tab")?;
     Ok(Timing {
         terminal,
         prepare_ms: pressed.duration_since(started).as_millis(),
@@ -114,15 +199,21 @@ fn handle(terminal: &Value) -> Option<String> {
 }
 
 fn press(chord: &Chord) {
-    for down in [true, false] {
-        unsafe {
-            let event = CGEventCreateKeyboardEvent(std::ptr::null(), chord.key_code, down);
+    // Private source (-1 = kCGEventSourceStatePrivate) prevents physical Shift+Cmd keys still held
+    // during Shift+Cmd+T from merging into the synthetic Ctrl+Alt+T chord.
+    unsafe {
+        let source = CGEventSourceCreate(-1);
+        for down in [true, false] {
+            let event = CGEventCreateKeyboardEvent(source, chord.key_code, down);
             if event.is_null() {
                 continue;
             }
             CGEventSetFlags(event, chord.flags);
             CGEventPost(HID_EVENT_TAP, event);
             CFRelease(event);
+        }
+        if !source.is_null() {
+            CFRelease(source);
         }
     }
 }
@@ -138,11 +229,27 @@ fn pick_new(current: &[Value], baseline: &HashSet<String>, claims: &Claims) -> O
     fresh.next().is_none().then_some(first)
 }
 
+fn pick_native_reopened(current: &[Value], baseline: &HashSet<String>, claims: &Claims, pressed_epoch_ms: u64) -> Option<String> {
+    if let Some(found) = pick_new(current, baseline, claims) {
+        return Some(found);
+    }
+    let cutoff = pressed_epoch_ms.saturating_sub(300);
+    let mut fresh = current.iter().filter(|t| {
+        t["writable"] == true
+            && (t["agentIdentity"].is_null() || t["agentIdentity"] == false)
+            && t["lastOutputAt"].as_u64().is_some_and(|ts| ts >= cutoff)
+            && t["preview"].as_str().unwrap_or("").len() <= 2_000
+    }).filter_map(handle).filter(|h| !claims.has(h));
+    let first = fresh.next()?;
+    fresh.next().is_none().then_some(first)
+}
+
 struct Search<'a> {
     home: &'a Path,
     id: &'a str,
     pressed_epoch_ms: u64,
     paired: bool,
+    handoff: Duration,
 }
 
 enum Found {
@@ -151,11 +258,21 @@ enum Found {
     Remote,
 }
 
-fn discover(rpc: &Rpc, baseline: &HashSet<String>, claims: &Claims, chord: &Chord, search: &Search) -> Result<Found> {
+fn discover(rpc: &Rpc, baseline: &HashSet<String>, claims: &Claims, chord: &Chord, search: &Search, control: &Control) -> Result<Found> {
     let started = Instant::now();
     let mut child: Option<Child> = None;
     let mut handed_off = false;
-    while started.elapsed() < DISCOVER_DEADLINE {
+    let mut limit = DISCOVER_DEADLINE;
+    let mut paired_failed = false;
+    while started.elapsed() < limit {
+        if (control.cancelled)() {
+            // Free the launch lock at once so the superseding press can open its tab.
+            if let Some(mut child) = child.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            return Err(Superseded.into());
+        }
         if let Ok(current) = terminals(rpc) {
             if let Some(found) = pick_new(&current, baseline, claims) {
                 if let Some(mut child) = child.take() {
@@ -165,7 +282,7 @@ fn discover(rpc: &Rpc, baseline: &HashSet<String>, claims: &Claims, chord: &Chor
                 return Ok(Found::Local(found));
             }
         }
-        if !handed_off && search.paired && started.elapsed() >= REMOTE_HANDOFF {
+        if !handed_off && search.paired && started.elapsed() >= search.handoff {
             handed_off = true;
             child = Some(remote::spawn(search.home, search.id, search.pressed_epoch_ms)?);
         }
@@ -175,6 +292,12 @@ fn discover(rpc: &Rpc, baseline: &HashSet<String>, claims: &Claims, chord: &Chor
                 if status.success() {
                     return Ok(Found::Remote);
                 }
+                // The paired search found nothing it could use, e.g. the user closed the new tab
+                // before the alias landed (terminal_not_writable). One chord opens one tab, so
+                // polling this Mac for the rest of DISCOVER_DEADLINE only holds the launch lock
+                // and swallows every F-key for ~30 s (2026-11-10, a client Mac over its host).
+                paired_failed = true;
+                limit = limit_after_paired_failure(limit, started.elapsed());
             }
         }
         std::thread::sleep(DISCOVER_INTERVAL);
@@ -183,7 +306,16 @@ fn discover(rpc: &Rpc, baseline: &HashSet<String>, claims: &Claims, chord: &Chor
         let _ = child.kill();
         let _ = child.wait();
     }
+    if paired_failed {
+        bail!("the paired-host search after {} failed (its error is logged above) and no tab opened on this Mac", chord.label)
+    }
     bail!("Orca opened no terminal within 30 s of {}; is a workspace selected?", chord.label)
+}
+
+/// After a failed paired-host search, this Mac gets a short grace for a slow local tab, never more
+/// than the original deadline.
+fn limit_after_paired_failure(limit: Duration, elapsed: Duration) -> Duration {
+    limit.min(elapsed + PAIRED_FAILURE_GRACE)
 }
 
 /// One write only: a lost reply is checked, never resent.
@@ -202,44 +334,6 @@ fn send(rpc: &Rpc, terminal: &str, command: &str) -> Result<()> {
         }
     }
     Err(error.context("send the account command; nothing was resent"))
-}
-
-/// `claimed-terminals.json`: JSON strings `[environment, handle]`, shared with shortcut-guard.mjs.
-struct Claims {
-    path: PathBuf,
-    entries: Vec<String>,
-}
-
-impl Claims {
-    fn load(path: &Path) -> Result<Self> {
-        let entries = match std::fs::read_to_string(path) {
-            Ok(text) => serde_json::from_str::<Vec<String>>(&text)
-                .context("invalid shortcut terminal claims; refusing to reuse a terminal")?,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-            Err(error) => return Err(error.into()),
-        };
-        Ok(Self { path: path.to_owned(), entries })
-    }
-
-    fn key(handle: &str) -> String {
-        json!([null, handle]).to_string()
-    }
-
-    fn has(&self, handle: &str) -> bool {
-        self.entries.contains(&Self::key(handle))
-    }
-
-    fn claim(&mut self, handle: &str) -> Result<()> {
-        self.entries.push(Self::key(handle));
-        let start = self.entries.len().saturating_sub(4096);
-        self.entries.drain(..start);
-        let temporary = self.path.with_extension(format!("json.{}.tmp", std::process::id()));
-        let mut options = OpenOptions::new();
-        options.create(true).truncate(true).write(true).mode(0o600);
-        std::io::Write::write_all(&mut options.open(&temporary)?, serde_json::to_string(&self.entries)?.as_bytes())?;
-        std::fs::rename(&temporary, &self.path)?;
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -263,10 +357,10 @@ mod tests {
     }
 
     #[test]
-    fn a_corrupt_ledger_fails_closed() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("claims.json");
-        std::fs::write(&path, "{\"x\":1}").unwrap();
-        assert!(Claims::load(&path).is_err());
+    fn a_failed_paired_search_ends_the_launch_within_the_grace() {
+        let at = |ms| Duration::from_millis(ms);
+        assert_eq!(limit_after_paired_failure(DISCOVER_DEADLINE, at(2_400)), at(3_400));
+        assert_eq!(limit_after_paired_failure(DISCOVER_DEADLINE, at(29_500)), DISCOVER_DEADLINE);
+        assert_eq!(limit_after_paired_failure(at(3_400), at(5_000)), at(3_400));
     }
 }

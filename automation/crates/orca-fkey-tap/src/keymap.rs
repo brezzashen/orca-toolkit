@@ -10,9 +10,12 @@ use serde_json::Value;
 /// macOS virtual key codes for F1-F12, in order.
 const FUNCTION_KEY_CODES: [u16; 12] = [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111];
 const F1_KEY_EQUIVALENT: u32 = 0xF704;
+const KEY_CODE_T: u16 = 17;
 
 // CGEventFlags masks for the modifiers that make a chord, not a plain key.
-const MODIFIER_MASK: u64 = 0x0002_0000 | 0x0004_0000 | 0x0008_0000 | 0x0010_0000;
+const SHIFT_FLAG: u64 = 0x0002_0000;
+const COMMAND_FLAG: u64 = 0x0010_0000;
+const MODIFIER_MASK: u64 = SHIFT_FLAG | 0x0004_0000 | 0x0008_0000 | COMMAND_FLAG;
 
 /// Returns the 1-based function-key number for a virtual key code.
 pub fn function_key_number(key_code: u16) -> Option<u8> {
@@ -23,6 +26,11 @@ pub fn function_key_number(key_code: u16) -> Option<u8> {
 /// macOS sets the Fn flag on every function-key event.
 pub fn has_chord_modifier(flags: u64) -> bool {
     flags & MODIFIER_MASK != 0
+}
+
+/// True when `Shift+Cmd+T` (with no Control or Option) is pressed (`tab.reopenClosed`).
+pub fn is_reopen_closed_chord(key_code: u16, flags: u64) -> bool {
+    key_code == KEY_CODE_T && (flags & MODIFIER_MASK) == (SHIFT_FLAG | COMMAND_FLAG)
 }
 
 /// Returns the function-key number of a plain AppKit key equivalent such as "\u{F704}" (F1).
@@ -60,6 +68,16 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn shipped_template_fills_f1_to_f12() {
+        let accounts: Value =
+            serde_json::from_str(include_str!("../../../../account-shortcuts/accounts.json")).unwrap();
+        let slots = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "C1", "C2", "AG1", "AG2", "G1"];
+        for (index, id) in slots.iter().enumerate() {
+            assert_eq!(account_for_function_key(&accounts, index as u8 + 1).as_deref(), Some(*id));
+        }
+    }
+
+    #[test]
     fn maps_virtual_key_codes_to_function_numbers() {
         assert_eq!(function_key_number(122), Some(1));
         assert_eq!(function_key_number(98), Some(7));
@@ -75,13 +93,12 @@ mod tests {
     }
 
     #[test]
-    fn shipped_template_fills_f1_to_f12() {
-        let accounts: Value =
-            serde_json::from_str(include_str!("../../../../account-shortcuts/accounts.json")).unwrap();
-        let slots = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "C1", "C2", "AG1", "AG2", "G1"];
-        for (index, id) in slots.iter().enumerate() {
-            assert_eq!(account_for_function_key(&accounts, index as u8 + 1).as_deref(), Some(*id));
-        }
+    fn detects_shift_cmd_t_reopen_chord() {
+        assert!(is_reopen_closed_chord(17, 0x0002_0000 | 0x0010_0000));
+        assert!(is_reopen_closed_chord(17, 0x0002_0000 | 0x0010_0000 | 0x0080_0000));
+        assert!(!is_reopen_closed_chord(17, 0x0010_0000));
+        assert!(!is_reopen_closed_chord(17, 0x0002_0000 | 0x0010_0000 | 0x0008_0000));
+        assert!(!is_reopen_closed_chord(122, 0x0002_0000 | 0x0010_0000));
     }
 
     #[test]

@@ -52,6 +52,18 @@ fi
 # Cmd+Shift+T (Orca tab.reopenClosed) brings back a closed tab's cwd and title but starts a bare
 # shell. On the first prompt, `resume-home reopen` names the agent session that last held that
 # title in a closed pane, and the shell resumes it under its owning account.
+orca_reopen_tab() {
+  local cmd
+  if [[ -x "$HOME/.local/bin/orca-account-launch" ]]; then
+    cmd=$("$HOME/.local/bin/orca-account-launch" --restore-latest 2>/dev/null)
+  else
+    cmd=$("$HOME/.local/bin/resume-home" reopen --latest 2>/dev/null)
+  fi
+  [[ -n $cmd ]] || return 0
+  print -r -- "reopen: $cmd"
+  print -s -- "$cmd"
+  eval "$cmd"
+}
 if [[ "$TERM_PROGRAM" == Orca && -o interactive && -z "$ZSH_EXECUTION_STRING" && -n "$ORCA_TERMINAL_HANDLE" ]]; then
   _orca_reopen_resume() {
     add-zsh-hook -d precmd _orca_reopen_resume

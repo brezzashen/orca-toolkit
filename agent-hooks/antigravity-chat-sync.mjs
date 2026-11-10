@@ -2925,6 +2925,470 @@ function mainProcessAntigravityIconInstaller(rendererFnSource) {
           return opts === undefined ? origPcInspect(ptyId) : origPcInspect(ptyId, opts);
         };
       }
+
+      // Patch mobile-web bundle and runtimeRpc handlers so iOS / remote clients display the native
+      // Antigravity logo while keeping terminal-backed Native Chat UI streaming intact.
+      const zlib = process.mainModule.require('zlib');
+      const rt = global.__orcaMainStateBox?.runtime;
+      const rpc = global.__orcaMainStateBox?.runtimeRpc;
+      const reg = rpc?.dispatcher?.registry;
+      const homeDir = app.getPath('home');
+      const bridgeDir = path.join(
+        homeDir,
+        '.claude',
+        'projects',
+        // Claude Code names a project directory after its path with every non-alphanumeric character as '-'.
+        `${homeDir.replace(/[^A-Za-z0-9]/g, '-')}-antigravity-orca-bridge`,
+      );
+      const agStateDir = path.join(homeDir, '.orca', 'agent-hooks', 'antigravity-state');
+
+      const isAgStatusObj = (obj) => {
+        if (!obj || typeof obj !== 'object') return false;
+        if (obj.agentType === 'antigravity' || obj.__agOriginalAgent === 'antigravity') return true;
+        const tp = obj.providerSession?.transcriptPath || '';
+        if (typeof tp === 'string' && tp.includes('antigravity-orca-bridge')) return true;
+        const sid = obj.providerSession?.id || '';
+        return typeof sid === 'string' && sid.startsWith('ag-boot-');
+      };
+
+      const collectAgIdentities = () => {
+        const paneKeys = new Set();
+        const tabIds = new Set();
+        const handles = new Set();
+        const sessionIds = new Set();
+        const nonAgPaneKeys = new Set();
+        const rows = rt?.getAgentProviderSessionRows?.() || [];
+        for (const r of rows) {
+          if (!r || typeof r !== 'object') continue;
+          const pk = r.paneKey || '';
+          const tId = r.tabId || (pk ? String(pk).split(':')[0] : '');
+          const tp = r.providerSession?.transcriptPath || '';
+          if (isAgStatusObj(r)) {
+            if (pk) paneKeys.add(pk);
+            if (tId) tabIds.add(tId);
+            if (r.terminalHandle) handles.add(r.terminalHandle);
+            if (r.providerSession?.id) sessionIds.add(r.providerSession.id);
+          } else if (tp && !tp.includes('antigravity-orca-bridge')) {
+            if (pk) nonAgPaneKeys.add(pk);
+          }
+        }
+        try {
+          if (fs.existsSync(agStateDir)) {
+            for (const f of fs.readdirSync(agStateDir)) {
+              if (!f.endsWith('.pane')) continue;
+              const sid = f.slice(0, -'.pane'.length);
+              if (sid) sessionIds.add(sid);
+              const pk = fs.readFileSync(path.join(agStateDir, f), 'utf8').trim();
+              if (pk && !nonAgPaneKeys.has(pk)) {
+                paneKeys.add(pk);
+                const tId = pk.split(':')[0];
+                if (tId) tabIds.add(tId);
+              }
+            }
+          }
+        } catch {}
+        return { paneKeys, tabIds, handles, sessionIds };
+      };
+
+      const patchMobileTab = (tab, ids) => {
+        if (!tab || tab.type !== 'terminal') return tab;
+        const rawTabId = tab.parentTabId || String(tab.id || '').split('::')[0] || '';
+        const pk = rawTabId && tab.leafId ? `${rawTabId}:${tab.leafId}` : '';
+        const isAg =
+          tab.launchAgent === 'antigravity' ||
+          isAgStatusObj(tab.agentStatus) ||
+          (pk && ids.paneKeys.has(pk)) ||
+          (rawTabId && ids.tabIds.has(rawTabId)) ||
+          (tab.terminal && ids.handles.has(tab.terminal));
+        if (!isAg) return tab;
+        return {
+          ...tab,
+          launchAgent: 'antigravity',
+          ...(tab.agentStatus
+            ? {
+                agentStatus: {
+                  ...tab.agentStatus,
+                  __agOriginalAgent: 'antigravity',
+                },
+              }
+            : {}),
+        };
+      };
+
+      const patchMobileSnapshot = (snap, ids) => {
+        if (!snap || !Array.isArray(snap.tabs)) return snap;
+        let changed = false;
+        const nextTabs = snap.tabs.map((t) => {
+          const p = patchMobileTab(t, ids);
+          if (p !== t) changed = true;
+          return p;
+        });
+        return changed ? { ...snap, tabs: nextTabs } : snap;
+      };
+
+      if (rt && typeof rt.toMobileSessionTabsResult === 'function') {
+        const origToMobile =
+          global.__orcaOrigToMobileSessionTabsResult || rt.toMobileSessionTabsResult.bind(rt);
+        global.__orcaOrigToMobileSessionTabsResult = origToMobile;
+        rt.toMobileSessionTabsResult = (snap) => {
+          const res = origToMobile(snap);
+          try {
+            return patchMobileSnapshot(res, collectAgIdentities());
+          } catch {
+            return res;
+          }
+        };
+      }
+
+      if (reg && typeof reg.get === 'function') {
+        global.__orcaOrigRpcHandlers = global.__orcaOrigRpcHandlers || new Map();
+        const wrapRpcHandler = (methodName, wrapper) => {
+          const spec = reg.get(methodName);
+          if (!spec || typeof spec.handler !== 'function') return;
+          if (!global.__orcaOrigRpcHandlers.has(methodName)) {
+            global.__orcaOrigRpcHandlers.set(methodName, spec.handler);
+          }
+          spec.handler = wrapper(global.__orcaOrigRpcHandlers.get(methodName));
+        };
+
+        wrapRpcHandler('session.tabs.list', (orig) => async (params, ctx) => {
+          const res = await orig(params, ctx);
+          try {
+            return patchMobileSnapshot(res, collectAgIdentities());
+          } catch {
+            return res;
+          }
+        });
+
+        wrapRpcHandler('session.tabs.listAll', (orig) => async (params, ctx) => {
+          const res = await orig(params, ctx);
+          try {
+            if (res && Array.isArray(res.snapshots)) {
+              const ids = collectAgIdentities();
+              return { ...res, snapshots: res.snapshots.map((s) => patchMobileSnapshot(s, ids)) };
+            }
+          } catch {}
+          return res;
+        });
+
+        for (const wtMethod of ['worktree.ps', 'worktree.list']) {
+          wrapRpcHandler(wtMethod, (orig) => async (params, ctx) => {
+            const res = await orig(params, ctx);
+            try {
+              if (res && Array.isArray(res.worktrees)) {
+                const ids = collectAgIdentities();
+                return {
+                  ...res,
+                  worktrees: res.worktrees.map((w) => {
+                    if (!w || !Array.isArray(w.agents)) return w;
+                    return {
+                      ...w,
+                      agents: w.agents.map((a) => {
+                        const pk = a?.paneKey || '';
+                        const tId = pk ? String(pk).split(':')[0] : '';
+                        if (
+                          isAgStatusObj(a) ||
+                          (pk && ids.paneKeys.has(pk)) ||
+                          (tId && ids.tabIds.has(tId))
+                        ) {
+                          return {
+                            ...a,
+                            agentType: 'antigravity',
+                            __agOriginalAgent: 'antigravity',
+                          };
+                        }
+                        return a;
+                      }),
+                    };
+                  }),
+                };
+              }
+            } catch {}
+            return res;
+          });
+        }
+
+        wrapRpcHandler('terminal.list', (orig) => async (params, ctx) => {
+          const res = await orig(params, ctx);
+          try {
+            if (res && Array.isArray(res.terminals)) {
+              const ids = collectAgIdentities();
+              return {
+                ...res,
+                terminals: res.terminals.map((t) => {
+                  if (!t) return t;
+                  const pk = t.tabId && t.leafId ? `${t.tabId}:${t.leafId}` : '';
+                  if (
+                    (t.handle && ids.handles.has(t.handle)) ||
+                    (pk && ids.paneKeys.has(pk)) ||
+                    (t.tabId && ids.tabIds.has(t.tabId))
+                  ) {
+                    return { ...t, agentIdentity: 'antigravity' };
+                  }
+                  return t;
+                }),
+              };
+            }
+          } catch {}
+          return res;
+        });
+
+        wrapRpcHandler('terminal.agentStatus', (orig) => async (params, ctx) => {
+          const res = await orig(params, ctx);
+          try {
+            const stObj = res?.agentStatus;
+            if (stObj) {
+              const ids = collectAgIdentities();
+              const pk = stObj.paneKey || '';
+              const tId = stObj.tabId || (pk ? String(pk).split(':')[0] : '');
+              if (
+                isAgStatusObj(stObj) ||
+                (pk && ids.paneKeys.has(pk)) ||
+                (tId && ids.tabIds.has(tId)) ||
+                (stObj.terminalHandle && ids.handles.has(stObj.terminalHandle))
+              ) {
+                return {
+                  ...res,
+                  agentStatus: {
+                    ...stObj,
+                    __agOriginalAgent: 'antigravity',
+                  },
+                };
+              }
+            }
+          } catch {}
+          return res;
+        });
+
+        const normalizeNativeChatParams = (params) => {
+          if (!params || typeof params !== 'object') return params;
+          const sid = params.sessionId || '';
+          const candidateTp =
+            params.transcriptPath || (sid ? path.join(bridgeDir, `${sid}.jsonl`) : '');
+          const isAgChat =
+            params.agent === 'antigravity' ||
+            (typeof params.transcriptPath === 'string' &&
+              params.transcriptPath.includes('antigravity-orca-bridge')) ||
+            Boolean(
+              sid &&
+                (sid.startsWith('ag-boot-') || fs.existsSync(path.join(bridgeDir, `${sid}.jsonl`))),
+            );
+          if (!isAgChat) return params;
+          return {
+            ...params,
+            agent: 'claude',
+            ...(candidateTp && fs.existsSync(candidateTp) ? { transcriptPath: candidateTp } : {}),
+          };
+        };
+
+        wrapRpcHandler('nativeChat.readSession', (orig) => (params, ctx) =>
+          orig(normalizeNativeChatParams(params), ctx),
+        );
+        wrapRpcHandler('nativeChat.subscribe', (orig) => (params, ctx, emit) =>
+          orig(normalizeNativeChatParams(params), ctx, emit),
+        );
+
+        const mwDirCandidates = [
+          path.join(process.resourcesPath, 'app.asar.unpacked', 'out', 'mobile-web'),
+          path.join(process.resourcesPath, 'app.asar', 'out', 'mobile-web'),
+        ];
+        const mwDir = mwDirCandidates.find((d) => fs.existsSync(path.join(d, 'manifest.json')));
+        if (mwDir) {
+          const rawManifest = JSON.parse(fs.readFileSync(path.join(mwDir, 'manifest.json'), 'utf8'));
+          const bundleVersion = 'ag-mobile-v2';
+          if (
+            global.__orcaPatchedMobileWebBundle?.sourceBuildId !== rawManifest.buildId ||
+            global.__orcaPatchedMobileWebBundle?.version !== bundleVersion
+          ) {
+            const buffersByPath = new Map();
+            const patchedAssets = rawManifest.assets.map((asset) => {
+              if (!asset.path.endsWith('.js')) return asset;
+              const fullPath = path.join(mwDir, asset.path);
+              const orig = fs.readFileSync(fullPath, 'utf8');
+              if (orig.includes('mobileWebBundleProbeRow')) return asset;
+              let next = orig;
+
+              // 1. Resolve Antigravity icon in sG, Hh, lm for tab bar, tab card, sender avatar, and dock
+              next = next.replace(
+                /function (\w+)\((\w+),(\w+)\)\{return \2==="claude"&&\3==="cursor"\?"cursor":\2\}/g,
+                'function $1($2,$3,_agS){return($2==="claude"||$2==="antigravity")&&($3==="antigravity"||_agS?.__agOriginalAgent==="antigravity"||_agS?.providerSession?.transcriptPath?.includes("antigravity-orca-bridge")||_agS?.providerSession?.id?.startsWith("ag-boot-"))?"antigravity":$2==="claude"&&$3==="cursor"?"cursor":$2}',
+              );
+              next = next.replace(
+                /function (\w+)\((\w+),(\w+)\)\{let (\w+)=\2\.agentStatus\?\.agentType\?\.trim\(\);return \4&&\4!=="unknown"\?(\w+)\(\4,\3\)\?\?null:\2\.launchAgent\?\2\.launchAgent:null\}/g,
+                'function $1($2,$3){let $4=$2.agentStatus?.agentType?.trim();return $2.launchAgent==="antigravity"?"antigravity":$4&&$4!=="unknown"?$5($4,$3,$2.agentStatus)??null:$2.launchAgent?$2.launchAgent:null}',
+              );
+              next = next.replace(
+                /function (\w+)\((\w+),(\w+)\)\{let (\w+)=\2\.agentStatus,(\w+)=(\w+)\((\w+)\(\4\?\.agentType,\3\)\);return (\w+)\(\{title:\2\.title,hookAgent:\4\?\.state==="done"\?null:\5,focusedCompletedHookAgent:\4\?\.state==="done"\?\5:null,processAgent:\3==="cursor"&&!(\w+)\(\2\)\?"cursor":null,launchAgent:\2\.launchAgent\?\?void 0\}\)\}/g,
+                'function $1($2,$3){let $4=$2.agentStatus,$5=$6($2.launchAgent==="antigravity"?"antigravity":$7($4?.agentType,$3,$4));return $8({title:$2.title,hookAgent:$4?.state==="done"?null:$5,focusedCompletedHookAgent:$4?.state==="done"?$5:null,processAgent:($3==="cursor"||$3==="antigravity")&&!$9($2,$3)?$3:null,launchAgent:$2.launchAgent??void 0})}',
+              );
+
+              // 2. Enable terminal-backed Native Chat UI and options for antigravity
+              next = next.replace(
+                '["claude","openclaude","codex","grok","omp","opencode","opencode2","zcode"]',
+                '["claude","openclaude","antigravity","codex","grok","omp","opencode","opencode2","zcode"]',
+              );
+              next = next.replace(
+                /function (\w+)\((\w+)\)\{return \2==="claude"\|\|\2==="openclaude"\?"claude":/g,
+                'function $1($2){return $2==="claude"||$2==="openclaude"||$2==="antigravity"?"claude":',
+              );
+              next = next.replace(
+                /if\((\w+)\.type!=="terminal"\)return null;let (\w+)=\1\.agentStatus\?\.agentType\?\?null,/g,
+                'if($1.type!=="terminal")return null;let $2=($1.launchAgent==="antigravity"||$1.agentStatus?.__agOriginalAgent==="antigravity"||$1.agentStatus?.providerSession?.transcriptPath?.includes("antigravity-orca-bridge")||$1.agentStatus?.providerSession?.id?.startsWith("ag-boot-"))?"antigravity":($1.agentStatus?.agentType??null),',
+              );
+              next = next.replace(
+                'openclaude:{skillPrefix:"/",skillSourceOwner:"claude",expandsSlashCommandsFromText:!0}',
+                'openclaude:{skillPrefix:"/",skillSourceOwner:"claude",expandsSlashCommandsFromText:!0},antigravity:{skillPrefix:"/",skillSourceOwner:"claude",expandsSlashCommandsFromText:!0}',
+              );
+
+              // 3. Enable image attachments for antigravity in mobile Chat UI
+              next = next.replace(
+                'new Set(["claude","openclaude","codex","gemini","cursor","copilot","droid","grok"])',
+                'new Set(["claude","openclaude","antigravity","codex","gemini","cursor","copilot","droid","grok"])',
+              );
+
+              // 4. Render Antigravity icon in worktree agent rows and collapsed status pills
+              next = next.replace(
+                /\{agentId:(\w+)\.agentType,size:13\}/g,
+                '{agentId:$1.__agOriginalAgent||$1.agentType,size:13}',
+              );
+
+              if (next !== orig) {
+                const buf = Buffer.from(next, 'utf8');
+                const sha256 = crypto.createHash('sha256').update(buf).digest('hex');
+                buffersByPath.set(asset.path, buf);
+                return {
+                  ...asset,
+                  sha256,
+                  byteLength: buf.byteLength,
+                };
+              }
+              return asset;
+            });
+
+            const sortedAssets = [...patchedAssets].sort((a, b) =>
+              a.path === b.path ? 0 : a.path < b.path ? -1 : 1,
+            );
+            const canonicalAssetsJson = JSON.stringify(
+              sortedAssets.map((a) => ({
+                path: a.path,
+                sha256: a.sha256,
+                byteLength: a.byteLength,
+                contentType: a.contentType,
+              })),
+            );
+            const buildId = crypto
+              .createHash('sha256')
+              .update(canonicalAssetsJson)
+              .digest('hex');
+            const totalBytes = sortedAssets.reduce((acc, a) => acc + a.byteLength, 0);
+            const patchedManifest = {
+              ...rawManifest,
+              buildId,
+              totalBytes,
+              assets: sortedAssets,
+            };
+            global.__orcaPatchedMobileWebBundle = {
+              version: bundleVersion,
+              rootDir: mwDir,
+              sourceBuildId: rawManifest.buildId,
+              manifest: patchedManifest,
+              assetsByPath: new Map(sortedAssets.map((a) => [a.path, a])),
+              buffersByPath,
+            };
+          }
+
+          const chunkBytes = 49152;
+          const readPatchedAssetSlice = (params) => {
+            const bundle = global.__orcaPatchedMobileWebBundle;
+            if (!bundle || params?.buildId !== bundle.manifest.buildId) return null;
+            const asset = bundle.assetsByPath.get(params.path);
+            if (!asset) return null;
+            const fullBuf =
+              bundle.buffersByPath.get(params.path) ||
+              fs.readFileSync(path.join(bundle.rootDir, params.path));
+            const offset = Number(params.offset || 0);
+            const len = Math.min(chunkBytes, Math.max(0, asset.byteLength - offset));
+            const slice = len > 0 ? fullBuf.subarray(offset, offset + len) : Buffer.alloc(0);
+            return {
+              header: {
+                buildId: bundle.manifest.buildId,
+                path: asset.path,
+                offset,
+                assetByteLength: asset.byteLength,
+                sha256: asset.sha256,
+                eof: offset + slice.byteLength >= asset.byteLength,
+              },
+              data: slice,
+            };
+          };
+
+          wrapRpcHandler('mobileWeb.bundle.manifest', (orig) => async (params, ctx) => {
+            const bundle = global.__orcaPatchedMobileWebBundle;
+            if (bundle?.manifest) {
+              return {
+                manifest: bundle.manifest,
+                chunkBytes,
+                rangeBytes: chunkBytes,
+              };
+            }
+            return orig(params, ctx);
+          });
+
+          wrapRpcHandler('mobileWeb.bundle.chunk', (orig) => async (params, ctx) => {
+            const sliced = readPatchedAssetSlice(params);
+            if (sliced) {
+              return {
+                ...sliced.header,
+                dataBase64: sliced.data.toString('base64'),
+              };
+            }
+            return orig(params, ctx);
+          });
+
+          wrapRpcHandler('mobileWeb.bundle.range', (orig) => async (params, ctx) => {
+            const sliced = readPatchedAssetSlice(params);
+            if (sliced) {
+              if (sliced.data.byteLength === 0) {
+                return {
+                  ...sliced.header,
+                  encoding: 'identity',
+                  dataBase64: '',
+                };
+              }
+              const gz = zlib.gzipSync(sliced.data, { level: 6 });
+              const useGzip = gz.byteLength < sliced.data.byteLength;
+              return {
+                ...sliced.header,
+                encoding: useGzip ? 'gzip' : 'identity',
+                dataBase64: (useGzip ? gz : sliced.data).toString('base64'),
+              };
+            }
+            return orig(params, ctx);
+          });
+
+          const newBuildId = global.__orcaPatchedMobileWebBundle?.manifest?.buildId;
+          if (newBuildId && global.__orcaBroadcastedMobileWebBuildId !== newBuildId) {
+            global.__orcaBroadcastedMobileWebBuildId = newBuildId;
+            try {
+              for (const wtId of rt?.mobileSessionTabsByWorktree?.keys?.() || []) {
+                rt.emitMobileSessionTabsSnapshot?.(wtId);
+              }
+            } catch {}
+            try {
+              const wiring = rpc?.getMobileSocketWiring?.();
+              if (wiring?.authenticatedSockets) {
+                for (const [sock, meta] of wiring.authenticatedSockets.entries()) {
+                  if (meta?.device?.scope === 'mobile') {
+                    try {
+                      sock?.close?.();
+                    } catch {}
+                  }
+                }
+              }
+            } catch {}
+          }
+        }
+      }
     } catch {}
   }
 

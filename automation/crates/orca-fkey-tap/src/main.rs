@@ -1,4 +1,4 @@
-//! orca-fkey-tap: lets the Orca account function keys (F1-F12) open a new account terminal while a
+//! orca-fkey-tap: lets the Orca account function keys (F1-F9) open a new account terminal while a
 //! terminal has focus, run by `~/Library/LaunchAgents/local.orca-toolkit.fkey-tap.plist`.
 //!
 //! The keys are macOS Services scoped to Orca (`~/.orca/account-shortcuts/install.ts`). A Service
@@ -14,10 +14,11 @@
 //! The tap needs Accessibility. Until it is granted the program registers itself in the
 //! Accessibility list, retries every 15 s, and the Services keep working from the Chat UI.
 //!
-//! One press opens one tab. An accepted press plays a short system sound at once, and every
-//! function-key press that arrives while that launch is still opening (and for a short tail after
-//! the launch finishes, while the agent boots) is swallowed instead of queuing another tab
-//! (2026-10-28: three F5 presses in two seconds opened three conversations).
+//! One press opens one tab. An accepted press plays a short system sound at once; `gate.rs`
+//! refuses (with a different sound) presses that arrive while that launch is young or its agent
+//! boots, and lets a later press supersede a launch that never found its terminal, so closing a
+//! just-opened tab no longer blocks every F-key for 30 s. A failed paired-host search also ends
+//! its launch after a 1 s local grace.
 //!
 //! The launched account terminal reaches the remote Orca runtime on the LAN, and this job is the
 //! responsible process for that Local Network check. As a bare binary its Allow never stuck:
@@ -29,6 +30,8 @@
 //!   orca-fkey-tap check    print trust, the frontmost app and the key map, then exit
 
 mod account;
+mod claims;
+mod gate;
 #[path = "../../../shared/app_bundle.rs"]
 mod app_bundle;
 mod keymap;
@@ -42,16 +45,13 @@ use serde_json::Value;
 use std::ffi::{c_char, c_void, CStr};
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::atomic::{AtomicPtr, AtomicU16, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicU16, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const ORCA_BUNDLE_ID: &str = "com.stablyai.orca";
 const RETRY_UNTRUSTED: Duration = Duration::from_secs(15);
-// Upper bound on how long one launch may block further presses if it hangs.
-const LAUNCH_HOLD_MS: u64 = 15_000;
-// Presses this soon after a launch finishes still belong to the tab whose agent is booting.
-const LAUNCH_TAIL_MS: u64 = 1_500;
 const ACCEPT_SOUND: &CStr = c"Hero";
+const REFUSE_SOUND: &CStr = c"Basso";
 const BUNDLE: app_bundle::AppBundle = app_bundle::AppBundle {
     id: "local.orca-toolkit.fkey-tap",
     executable: "orca-fkey-tap",
@@ -121,8 +121,6 @@ extern "C" {
 static TAP: AtomicPtr<c_void> = AtomicPtr::new(std::ptr::null_mut());
 // Bit n is set while the key-down of function key n was swallowed and its key-up is still due.
 static SWALLOWED: AtomicU16 = AtomicU16::new(0);
-// Epoch milliseconds until which a new launch is refused; 0 when idle.
-static BUSY_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
 
 fn main() -> Result<()> {
     let _ = unsafe { NSWorkspaceDidActivateApplicationNotification };
@@ -209,12 +207,20 @@ fn frontmost_bundle_id() -> Option<String> {
     }
 }
 
-/// Opens the account tab on a worker thread; the event tap callback must return at once.
-fn launch_account(id: &str, pressed_ms: u64) {
+/// Opens the account or reopen tab on a worker thread; the event tap callback must return at once.
+fn launch_account(id: &str, pressed_ms: u64, generation: u64) {
     let id = id.to_owned();
     std::thread::spawn(move || {
-        let result = open::run(&home(), &id, || frontmost_bundle_id().as_deref() == Some(ORCA_BUNDLE_ID));
-        BUSY_UNTIL_MS.store(now_ms() + LAUNCH_TAIL_MS, Ordering::SeqCst);
+        let is_front = || frontmost_bundle_id().as_deref() == Some(ORCA_BUNDLE_ID);
+        let cancelled = || !gate::lock().is_current(generation);
+        let found = || gate::lock().found(generation);
+        let control = open::Control { cancelled: &cancelled, found: &found };
+        let result = if id == "REOPEN" {
+            open::run_reopen(&home(), pressed_ms, is_front, &control)
+        } else {
+            open::run(&home(), &id, is_front, &control)
+        };
+        gate::lock().finish(generation, now_ms());
         match result {
             Ok(timing) => log(&format!(
                 "shortcut-timing {}",
@@ -225,6 +231,7 @@ fn launch_account(id: &str, pressed_ms: u64) {
                     "discoverMs": timing.discover_ms, "sendMs": timing.send_ms,
                 })
             )),
+            Err(error) if error.is::<open::Superseded>() => log(&format!("launch {id} superseded by a newer press")),
             Err(error) => {
                 log(&format!("launch {id} failed: {error:#}"));
                 notify(&format!("{id}: {error:#}"));
@@ -248,6 +255,19 @@ extern "C" fn on_event(_proxy: *mut c_void, kind: u32, event: CGEventRef, _user:
         return event;
     }
     let key_code = unsafe { CGEventGetIntegerValueField(event, FIELD_KEYBOARD_KEYCODE) } as u16;
+    let flags = unsafe { CGEventGetFlags(event) };
+    if kind == EVENT_KEY_DOWN && keymap::is_reopen_closed_chord(key_code, flags) {
+        if frontmost_bundle_id().as_deref() == Some(ORCA_BUNDLE_ID)
+            && unsafe { CGEventGetIntegerValueField(event, FIELD_KEYBOARD_AUTOREPEAT) } == 0
+            && remote::has_paired_hosts(&home())
+        {
+            // Orca still gets the chord and reopens natively, so a refusal stays silent here.
+            if let Some((now, generation)) = admit_press("Shift+Cmd+T -> REOPEN", false) {
+                launch_account("REOPEN", now, generation);
+            }
+        }
+        return event;
+    }
     let Some(number) = keymap::function_key_number(key_code) else { return event };
     let bit = 1u16 << number;
 
@@ -255,7 +275,7 @@ extern "C" fn on_event(_proxy: *mut c_void, kind: u32, event: CGEventRef, _user:
         let held = SWALLOWED.fetch_and(!bit, Ordering::SeqCst);
         return if held & bit != 0 { std::ptr::null_mut() } else { event };
     }
-    if kind != EVENT_KEY_DOWN || keymap::has_chord_modifier(unsafe { CGEventGetFlags(event) }) {
+    if kind != EVENT_KEY_DOWN || keymap::has_chord_modifier(flags) {
         return event;
     }
     if frontmost_bundle_id().as_deref() != Some(ORCA_BUNDLE_ID) {
@@ -275,22 +295,30 @@ extern "C" fn on_event(_proxy: *mut c_void, kind: u32, event: CGEventRef, _user:
     if unsafe { CGEventGetIntegerValueField(event, FIELD_KEYBOARD_AUTOREPEAT) } != 0 {
         return std::ptr::null_mut();
     }
-    let now = now_ms();
-    if !accepts_launch(BUSY_UNTIL_MS.load(Ordering::SeqCst), now) {
-        log(&format!("F{number} -> {account} ignored: the previous launch is still opening"));
-        return std::ptr::null_mut();
+    if let Some((now, generation)) = admit_press(&format!("F{number} -> {account}"), true) {
+        launch_account(&account, now, generation);
     }
-    BUSY_UNTIL_MS.store(now + LAUNCH_HOLD_MS, Ordering::SeqCst);
-    let chimed = play_sound(ACCEPT_SOUND);
-    log(&format!("F{number} -> {account}{}", if chimed { "" } else { " (sound failed)" }));
-    launch_account(&account, now);
     std::ptr::null_mut()
 }
 
-/// A press launches only when no earlier launch is still opening or booting.
-fn accepts_launch(busy_until_ms: u64, now_ms: u64) -> bool {
-    now_ms >= busy_until_ms
+/// Runs the press gate (`gate.rs`), plays its sound and returns the press time and generation.
+fn admit_press(label: &str, refusal_sound: bool) -> Option<(u64, u64)> {
+    let now = now_ms();
+    let (decision, generation) = gate::lock().admit(now);
+    if decision == gate::Decision::Refuse {
+        // A silent refusal read as a broken key (2026-11-10); a distinct sound says "not now".
+        if refusal_sound {
+            let _ = play_sound(REFUSE_SOUND);
+        }
+        log(&format!("{label} ignored: the previous launch is still opening"));
+        return None;
+    }
+    let chimed = play_sound(ACCEPT_SOUND);
+    let superseding = if decision == gate::Decision::Supersede { " (supersedes the unfinished launch)" } else { "" };
+    log(&format!("{label}{superseding}{}", if chimed { "" } else { " (sound failed)" }));
+    Some((now, generation))
 }
+
 
 fn run() -> Result<()> {
     let mask = (1u64 << EVENT_KEY_DOWN) | (1u64 << EVENT_KEY_UP);
@@ -327,18 +355,9 @@ fn check() -> Result<()> {
             println!("F{number} -> {id}");
         }
     }
+    if remote::has_paired_hosts(&home()) {
+        println!("Shift+Cmd+T -> REOPEN");
+    }
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn presses_during_an_open_launch_are_refused() {
-        assert!(accepts_launch(0, 1_000));
-        assert!(!accepts_launch(1_000 + LAUNCH_HOLD_MS, 1_200));
-        assert!(!accepts_launch(5_000 + LAUNCH_TAIL_MS, 5_100));
-        assert!(accepts_launch(5_000 + LAUNCH_TAIL_MS, 5_000 + LAUNCH_TAIL_MS));
-    }
-}

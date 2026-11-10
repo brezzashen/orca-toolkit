@@ -29,6 +29,7 @@ const MAX_IDLE: Duration = Duration::from_secs(7 * 24 * 3600);
 pub struct Pick {
     pub agent: Agent,
     pub session: String,
+    pub title: String,
     /// The closed pane's record, moved to the new pane once the pick is accepted.
     pub record: PathBuf,
 }
@@ -49,14 +50,14 @@ pub struct OrcaView {
     pub workspace: PathBuf,
 }
 
-pub fn run() -> ExitCode {
+pub fn run(latest: bool) -> ExitCode {
     let Some(handle) = env::var("ORCA_TERMINAL_HANDLE")
         .ok()
         .filter(|h| !h.is_empty() && h.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'))
     else {
         return ExitCode::SUCCESS;
     };
-    if input_pending() {
+    if !latest && input_pending() {
         return ExitCode::SUCCESS;
     }
     let Some(home) = env::var_os("HOME").map(PathBuf::from) else { return ExitCode::SUCCESS };
@@ -65,17 +66,23 @@ pub fn run() -> ExitCode {
     if records.join(format!("{handle}.json")).exists() || !has_records(&records) {
         return ExitCode::SUCCESS;
     }
-    let Some(view) = super::orca_view::query_orca(&home, &handle) else { return ExitCode::SUCCESS };
-    let Some(pick) = pick(&home, &records, &handle, &view, SystemTime::now(), &running_claude_sessions(&home))
-    else {
+    let Some(view) = super::orca_view::query_orca(&home, &handle, latest) else { return ExitCode::SUCCESS };
+    let now = SystemTime::now();
+    let running = running_claude_sessions(&home);
+    let chosen = pick(&home, &records, &handle, &view, now, &running)
+        .or_else(|| latest.then(|| pick_latest(&home, &records, &handle, &view, now, &running)).flatten());
+    let Some(pick) = chosen else {
         return ExitCode::SUCCESS;
     };
-    if input_pending() {
+    if !latest && input_pending() {
         return ExitCode::SUCCESS;
     }
     // Move the record so hooks keep the title on the new pane and a second reopen cannot pick it.
     if fs::rename(&pick.record, records.join(format!("{handle}.json"))).is_err() {
         return ExitCode::SUCCESS;
+    }
+    if (latest || is_default_title(&view.title)) && !pick.title.is_empty() && view.title != pick.title {
+        let _ = super::orca_view::rename_terminal(&home, &handle, &pick.title);
     }
     println!("{}", pick.command());
     ExitCode::SUCCESS
@@ -83,6 +90,10 @@ pub fn run() -> ExitCode {
 
 fn has_records(dir: &Path) -> bool {
     fs::read_dir(dir).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.file_name().to_string_lossy().ends_with(".json"))))
+}
+
+fn is_default_title(title: &str) -> bool {
+    title.is_empty() || title == "zsh" || title == "Terminal" || title.starts_with("Terminal ")
 }
 
 /// The newest closed pane whose recorded title equals this tab's title and whose session can be
@@ -95,10 +106,10 @@ pub fn pick(
     now: SystemTime,
     running: &HashSet<String>,
 ) -> Option<Pick> {
-    if view.title.is_empty() || view.title == "zsh" || view.title.starts_with("Terminal ") {
+    if is_default_title(&view.title) {
         return None;
     }
-    let mut candidates: Vec<(SystemTime, PathBuf, String)> = fs::read_dir(records)
+    let mut candidates: Vec<(SystemTime, PathBuf, String, String)> = fs::read_dir(records)
         .ok()?
         .flatten()
         .filter_map(|entry| {
@@ -108,27 +119,72 @@ pub fn pick(
                 return None;
             }
             let record: Value = serde_json::from_slice(&fs::read(&path).ok()?).ok()?;
-            if record["title"].as_str()? != view.title {
+            let title = record["title"].as_str()?;
+            if title != view.title {
                 return None;
             }
             let session = record["session"].as_str().filter(|s| is_session_id(s))?.to_string();
-            Some((entry.metadata().ok()?.modified().ok()?, path, session))
+            Some((entry.metadata().ok()?.modified().ok()?, path, session, title.to_string()))
         })
         .collect();
     candidates.sort_by_key(|c| std::cmp::Reverse(c.0));
-    candidates.into_iter().find_map(|(_, record, session)| {
-        if running.contains(&session) {
-            return None;
-        }
-        let (agent, last) = [Agent::Claude, Agent::Codex].into_iter().find_map(|agent| {
-            if !super::workspace::matches(home, agent, &session, &view.workspace) {
+    candidates.into_iter().find_map(|(_, record, session, title)| {
+        resolve_resumable(home, &view.workspace, now, running, &session)
+            .map(|(agent, _)| Pick { agent, session, title, record })
+    })
+}
+
+/// The most recently active closed pane in `view.workspace`, used when a remote runtime reopened a
+/// tab without carrying its custom title over `session.tabs.createTerminal`.
+pub fn pick_latest(
+    home: &Path,
+    records: &Path,
+    handle: &str,
+    view: &OrcaView,
+    now: SystemTime,
+    running: &HashSet<String>,
+) -> Option<Pick> {
+    let mut recent: Vec<(SystemTime, PathBuf)> = fs::read_dir(records)
+        .ok()?
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let stem = path.file_name()?.to_str()?.strip_suffix(".json")?.to_string();
+            if stem == handle || view.live.contains(&stem) {
                 return None;
             }
-            let last = homes(agent, home).iter().filter_map(|root| agent.session_mtime(root, &session)).max()?;
-            Some((agent, last))
-        })?;
-        (now.duration_since(last).unwrap_or_default() <= MAX_IDLE).then_some(Pick { agent, session, record })
+            let mtime = entry.metadata().ok()?.modified().ok()?;
+            (now.duration_since(mtime).unwrap_or_default() <= MAX_IDLE).then_some((mtime, path))
+        })
+        .collect();
+    recent.sort_by_key(|(mtime, _)| std::cmp::Reverse(*mtime));
+    recent.into_iter().take(64).find_map(|(_, path)| {
+        let record: Value = serde_json::from_slice(&fs::read(&path).ok()?).ok()?;
+        let title = record["title"].as_str().filter(|t| !is_default_title(t))?.to_string();
+        let session = record["session"].as_str().filter(|s| is_session_id(s))?.to_string();
+        let (agent, _) = resolve_resumable(home, &view.workspace, now, running, &session)?;
+        Some(Pick { agent, session, title, record: path })
     })
+}
+
+fn resolve_resumable(
+    home: &Path,
+    workspace: &Path,
+    now: SystemTime,
+    running: &HashSet<String>,
+    session: &str,
+) -> Option<(Agent, SystemTime)> {
+    if running.contains(session) {
+        return None;
+    }
+    let (agent, last) = [Agent::Claude, Agent::Codex].into_iter().find_map(|agent| {
+        if !super::workspace::matches(home, agent, session, workspace) {
+            return None;
+        }
+        let last = homes(agent, home).iter().filter_map(|root| agent.session_mtime(root, session)).max()?;
+        Some((agent, last))
+    })?;
+    (now.duration_since(last).unwrap_or_default() <= MAX_IDLE).then_some((agent, last))
 }
 
 /// Session ids of Claude processes alive in any account home (`<home>/sessions/<pid>.json`).

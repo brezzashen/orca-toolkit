@@ -30,7 +30,7 @@ fn picks_the_closed_pane_with_the_tab_title() {
     let rec = record(&dir, "term_closed", "告警→一键接管", OLD);
     record(&dir, "term_other", "别的→标题", NEWER);
     let got = pick(home.path(), &dir, "term_new", &view("告警→一键接管", &["term_new"]), SystemTime::now(), &HashSet::new());
-    assert_eq!(got, Some(Pick { agent: Agent::Claude, session: OLD.into(), record: rec }));
+    assert_eq!(got, Some(Pick { agent: Agent::Claude, session: OLD.into(), title: "告警→一键接管".into(), record: rec }));
     assert_eq!(got.unwrap().command(), format!("claude --dangerously-skip-permissions --resume {OLD}"));
 }
 
@@ -115,4 +115,33 @@ fn same_title_in_another_workspace_cannot_win() {
     fs::remove_file(dir.join("term_right.json")).unwrap();
     assert_eq!(pick(home.path(), &dir, "term_new", &view("same title", &[]),
         SystemTime::now(), &HashSet::new()), None);
+}
+
+#[test]
+fn pick_latest_restores_most_recent_closed_pane_for_workspace_on_default_title() {
+    let home = tempfile::tempdir().unwrap();
+    let dir = home.path().join("records");
+    seed_claude(home.path(), "team", OLD);
+    seed_claude(home.path(), "team2", NEWER);
+    record(&dir, "term_older", "旧→会话", OLD);
+    std::thread::sleep(Duration::from_millis(20));
+    let newest_rec = record(&dir, "term_newer", "新→会话", NEWER);
+    let got = pick_latest(
+        home.path(),
+        &dir,
+        "term_new",
+        &view("Terminal 1", &["term_new"]),
+        SystemTime::now(),
+        &HashSet::new(),
+    )
+    .unwrap();
+    assert_eq!(
+        got,
+        Pick {
+            agent: Agent::Claude,
+            session: NEWER.into(),
+            title: "新→会话".into(),
+            record: newest_rec,
+        }
+    );
 }

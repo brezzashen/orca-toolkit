@@ -36,7 +36,7 @@ falling back to another account. Details: [shortcut-routing.md](shortcut-routing
   - `cxp default` → `~/.codex`; `cxp <name>` → `CODEX_HOME=~/.codex-profiles/<name>`.
   - `true` → no profile switch (for example Grok, or Antigravity's single login).
   - `export AG2_ACCOUNT=<name>` → sets that variable for the account's `command`.
-- `key`: an AppKit key equivalent. F1–F12 are `""`–`""`; prefixes `@` Command, `^` Control,
+- `key`: an AppKit key equivalent. F1–F12 are the private-use characters U+F704–U+F70F, written as JSON escapes `"\uF704"` (F1) … `"\uF70F"` (F12) so they stay visible; prefixes `@` Command, `^` Control,
   `~` Option, `$` Shift (for example `^~1`). `extraShortcuts` adds more keys for the same account.
 - `viewMode`: `chat` (Orca Chat UI) or `terminal`.
 - `aliases` maps typed names (`CL2`, `cl2`) to account IDs. Keep `_orca_aliases` in `shell/orca.zsh` in step,

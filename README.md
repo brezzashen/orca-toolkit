@@ -3,6 +3,23 @@
 Unofficial add-ons for the [Orca](https://orca.dev) agent terminal on macOS, for people who run
 several Claude Code / Codex / Antigravity / Grok accounts side by side. Not affiliated with Orca or Stably.
 
+## Set it up with your agent
+
+Clone the repository, then ask Claude Code or Codex to follow the setup skill. It inventories your
+CLIs and profiles, proposes the F1–F12 slots, installs, and walks you through the few steps only you
+can do (Accessibility, pairing, restarting Orca), checking each one:
+
+```sh
+git clone https://github.com/brezzashen/orca-toolkit.git ~/orca-toolkit
+mkdir -p ~/.claude/skills ~/.codex/skills
+ln -s ~/orca-toolkit/skills/orca-toolkit-setup ~/.claude/skills/orca-toolkit-setup   # Claude Code
+ln -s ~/orca-toolkit/skills/orca-toolkit-setup ~/.codex/skills/orca-toolkit-setup    # Codex
+```
+
+Then say: *“Set up orca-toolkit on this Mac with the orca-toolkit-setup skill.”* The agent can also read
+[`skills/orca-toolkit-setup/SKILL.md`](skills/orca-toolkit-setup/SKILL.md) directly. Check any Mac at any
+time with `node scripts/doctor.ts --role host|client|both` (read-only; one fix per failed check).
+
 ## Start here: three remote workflows
 
 The agents run on one Mac (the host); a laptop or phone paired with it shows the same tabs.

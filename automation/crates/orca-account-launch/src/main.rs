@@ -21,12 +21,12 @@ fn main() {
 fn run() -> Result<()> {
     let args: Vec<String> = env::args().skip(1).collect();
     if args.is_empty() || args[0] == "--help" {
-        println!("orca-account-launch ACCOUNT [--check] [--chat] [--new-tab] [--from-shortcut]\norca-account-launch --restore\nRuns only on this Mac. --run [--agent-args TEXT] is the created terminal entry.");
+        println!("orca-account-launch ACCOUNT [--check] [--chat] [--new-tab] [--from-shortcut]\norca-account-launch --restore [--restore-latest]\nRuns only on this Mac. --run [--agent-args TEXT] is the created terminal entry.");
         return Ok(());
     }
     let home = PathBuf::from(env::var_os("HOME").context("HOME is unset")?);
-    if args[0] == "--restore" {
-        return restore::command(&home);
+    if args[0] == "--restore" || args[0] == "--restore-latest" {
+        return restore::command(&home, args[0] == "--restore-latest");
     }
     let has = |flag: &str| args.iter().any(|a| a == flag);
     if shortcut::uses_desktop(&args, env::var_os("ORCA_TERMINAL_HANDLE").is_some()) {
@@ -89,9 +89,22 @@ fn run() -> Result<()> {
     }
 }
 
+/// Replace this process with the agent. Plain-word arguments exec directly: every account command
+/// is an executable on the inherited PATH, so a second interactive zsh only re-read the rc files
+/// and cost another process launch while Orca waited. Quoted arguments still go through zsh.
 fn execute(account: &account::Account, args: &str) -> Result<()> {
-    let mut command = Command::new("/bin/zsh");
-    command.args(["-ic", &account.shell_command(args)]);
+    let mut command = match account.argv(args) {
+        Some(argv) => {
+            let mut direct = Command::new(&argv[0]);
+            direct.args(&argv[1..]);
+            direct
+        }
+        None => {
+            let mut shell = Command::new("/bin/zsh");
+            shell.args(["-ic", &account.shell_command(args)]);
+            shell
+        }
+    };
     account.apply(&mut command);
     Err(command.exec()).context("execute local agent")
 }

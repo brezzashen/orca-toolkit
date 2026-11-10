@@ -15,7 +15,7 @@ const CLI_RETRY_SLEEP: Duration = Duration::from_millis(300);
 /// Reads this pane's tab title and the live handles. Queries the local Orca Unix socket (~4 ms)
 /// unless `ORCA_CLI_BIN_DIR` overrides the binary for tests. The tab can sit in a pending slot for
 /// one renderer frame (~16 ms) after the shell starts, so a missing tab is retried briefly.
-pub(super) fn query_orca(home: &Path, handle: &str) -> Option<OrcaView> {
+pub(super) fn query_orca(home: &Path, handle: &str, latest: bool) -> Option<OrcaView> {
     let bin_dir = env::var("ORCA_CLI_BIN_DIR")
         .ok()
         .filter(|d| !d.is_empty())
@@ -37,7 +37,11 @@ pub(super) fn query_orca(home: &Path, handle: &str) -> Option<OrcaView> {
             let out = run_bounded(&bin, &["terminal", "list", "--include-visual-layouts", "--json"])?;
             serde_json::from_str(&out).ok()?
         };
-        if let Some(view) = parse_view(&value, handle) {
+        if let Some(view) = parse_view(&value, handle).or_else(|| {
+            (latest && attempt + 1 == attempts)
+                .then(|| parse_view_unmounted(&value, handle))
+                .flatten()
+        }) {
             return Some(view);
         }
         if is_orphaned_terminal(&value, handle) {
@@ -60,6 +64,40 @@ pub(super) fn is_orphaned_terminal(value: &Value, handle: &str) -> bool {
 }
 
 fn query_orca_socket(home: &Path) -> Option<Value> {
+    call_orca_socket(
+        home,
+        "reopen",
+        "terminal.list",
+        json!({ "includeVisualLayouts": true }),
+    )
+}
+
+/// Sets the tab title of `handle` on the local Orca runtime when `--latest` restores an untitled tab.
+pub(super) fn rename_terminal(home: &Path, handle: &str, title: &str) -> bool {
+    if title.is_empty() {
+        return false;
+    }
+    let bin_dir = env::var("ORCA_CLI_BIN_DIR")
+        .ok()
+        .filter(|d| !d.is_empty())
+        .unwrap_or_else(|| DEFAULT_ORCA_BIN_DIR.to_string());
+    if bin_dir == DEFAULT_ORCA_BIN_DIR {
+        if call_orca_socket(
+            home,
+            "reopen-rename",
+            "terminal.rename",
+            json!({ "terminal": handle, "title": title }),
+        )
+        .is_some()
+        {
+            return true;
+        }
+    }
+    let bin = PathBuf::from(bin_dir).join("orca");
+    run_bounded(&bin, &["terminal", "rename", "--terminal", handle, "--title", title, "--json"]).is_some()
+}
+
+fn call_orca_socket(home: &Path, id: &str, method: &str, params: Value) -> Option<Value> {
     let user_data = env::var_os("ORCA_USER_DATA_PATH")
         .filter(|p| !p.is_empty())
         .map_or_else(|| home.join("Library/Application Support/orca"), PathBuf::from);
@@ -76,10 +114,10 @@ fn query_orca_socket(home: &Path) -> Option<Value> {
     let _ = stream.set_read_timeout(Some(SOCKET_LIMIT));
     let _ = stream.set_write_timeout(Some(SOCKET_LIMIT));
     let req = json!({
-        "id": "reopen",
+        "id": id,
         "authToken": token,
-        "method": "terminal.list",
-        "params": { "includeVisualLayouts": true }
+        "method": method,
+        "params": params
     });
     stream.write_all(format!("{req}\n").as_bytes()).ok()?;
     let mut reader = BufReader::new(stream);
@@ -97,13 +135,19 @@ fn query_orca_socket(home: &Path) -> Option<Value> {
         if frame.get("_keepalive").and_then(Value::as_bool) == Some(true) {
             continue;
         }
-        return (frame.get("id").and_then(Value::as_str) == Some("reopen")
+        return (frame.get("id").and_then(Value::as_str) == Some(id)
             && frame.get("ok").and_then(Value::as_bool) != Some(false))
         .then_some(frame);
     }
 }
 
 pub fn parse_view(value: &Value, handle: &str) -> Option<OrcaView> {
+    let mut view = parse_view_unmounted(value, handle)?;
+    view.title = tab_title(value.pointer("/result/visualLayouts")?, handle)?;
+    Some(view)
+}
+
+fn parse_view_unmounted(value: &Value, handle: &str) -> Option<OrcaView> {
     let terminal = value.pointer("/result/terminals")?.as_array()?.iter()
         .find(|t| t["handle"].as_str() == Some(handle))?;
     // A desktop client must never resume a remote PTY against its own history.
@@ -118,7 +162,7 @@ pub fn parse_view(value: &Value, handle: &str) -> Option<OrcaView> {
         .iter()
         .filter_map(|t| t["handle"].as_str().map(str::to_string))
         .collect();
-    let title = tab_title(value.pointer("/result/visualLayouts")?, handle)?;
+    let title = terminal.get("title").and_then(Value::as_str).unwrap_or("").to_string();
     Some(OrcaView { title, live, workspace })
 }
 
