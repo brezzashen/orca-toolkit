@@ -51,7 +51,7 @@ export function pickSlot(slots: Slot[], index: number): Slot | { error: string }
   const slot = slots.find((candidate) => candidate.index === index)
   if (!slot) return { error: `There is no slot ${index}; slots run from 1 to ${SLOT_COUNT}.` }
   if (!slot.enabled) {
-    return { error: `Slot ${index} has no command yet. Set it in Settings > Plugins > Orca Toolkit.` }
+    return { error: `Slot ${index} has no command yet. Set it in Settings > Plugins > Toolkit for Orca.` }
   }
   return slot
 }
@@ -117,6 +117,6 @@ export function parseSlotLines(text: string): Record<string, string> | { error: 
 /** One line per enabled slot, for the status bar notification and the palette answer. */
 export function describeSlots(slots: Slot[]): string {
   const enabled = slots.filter((slot) => slot.enabled)
-  if (enabled.length === 0) return 'No slots are set. Add commands in Settings > Plugins > Orca Toolkit.'
+  if (enabled.length === 0) return 'No slots are set. Add commands in Settings > Plugins > Toolkit for Orca.'
   return enabled.map((slot) => `${slot.shortcut}  ${slot.label}`).join('\n')
 }

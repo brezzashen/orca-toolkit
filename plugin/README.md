@@ -1,4 +1,4 @@
-# Orca Toolkit plugin
+# Toolkit for Orca plugin
 
 The root `orca-plugin.json` declares the installable plugin. This directory contains only the
 plugin's account launcher; the optional native toolkit remains in the other directories.
