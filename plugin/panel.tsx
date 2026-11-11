@@ -92,7 +92,7 @@ export default function Panel() {
         <EmptyState
           icon="terminal"
           title="No account slots yet"
-          description="Add one line per slot below, or set each slot in Settings > Plugins > Toolkit for Orca."
+          description="Add one line per slot below, or set each slot in Settings > Plugins > F-Keys for Orca."
         />
       ) : (
         <Stack gap="sm">

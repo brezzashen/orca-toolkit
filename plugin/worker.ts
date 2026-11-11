@@ -53,7 +53,7 @@ export default function activate(orca: OrcaWorkerApi): void {
       return `Opened ${opened.title}`
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      await orca.host.call('notifications.show', { title: 'Toolkit for Orca', body: message }).catch(() => undefined)
+      await orca.host.call('notifications.show', { title: 'F-Keys for Orca', body: message }).catch(() => undefined)
       return message
     }
   }
@@ -64,7 +64,7 @@ export default function activate(orca: OrcaWorkerApi): void {
 
   orca.commands.register('show', async () => {
     const body = describeSlots(await currentSlots(orca))
-    await orca.host.call('notifications.show', { title: 'Toolkit for Orca', body }).catch(() => undefined)
+    await orca.host.call('notifications.show', { title: 'F-Keys for Orca', body }).catch(() => undefined)
     return body
   })
 

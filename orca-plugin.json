@@ -2,8 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
   "manifestVersion": 2,
   "id": "toolkit",
-  "name": "Toolkit for Orca",
-  "version": "0.2.1",
+  "name": "F-Keys for Orca",
+  "version": "0.2.2",
   "description": "Twelve account slots: Alt+F1 to Alt+F12, the palette or the sidebar panel open a new terminal tab in the focused workspace that runs the slot’s own command, such as an agent CLI on its own account profile.",
   "icon": "assets/plugin-icon.png",
   "license": "MIT",
@@ -37,7 +37,7 @@
     "panels": [
       {
         "id": "slots",
-        "title": "Toolkit for Orca",
+        "title": "F-Keys for Orca",
         "icon": "terminal",
         "entry": "plugin/panel.tsx",
         "ui": "components"
@@ -48,74 +48,74 @@
         "id": "slots",
         "text": "Accounts",
         "icon": "terminal",
-        "tooltip": "Toolkit for Orca: list the slots",
+        "tooltip": "F-Keys for Orca: list the slots",
         "command": "show"
       }
     ],
     "commands": [
       {
         "id": "slot-1",
-        "title": "Toolkit for Orca: Open Slot 1",
+        "title": "F-Keys for Orca: Open Slot 1",
         "when": "workspace"
       },
       {
         "id": "slot-2",
-        "title": "Toolkit for Orca: Open Slot 2",
+        "title": "F-Keys for Orca: Open Slot 2",
         "when": "workspace"
       },
       {
         "id": "slot-3",
-        "title": "Toolkit for Orca: Open Slot 3",
+        "title": "F-Keys for Orca: Open Slot 3",
         "when": "workspace"
       },
       {
         "id": "slot-4",
-        "title": "Toolkit for Orca: Open Slot 4",
+        "title": "F-Keys for Orca: Open Slot 4",
         "when": "workspace"
       },
       {
         "id": "slot-5",
-        "title": "Toolkit for Orca: Open Slot 5",
+        "title": "F-Keys for Orca: Open Slot 5",
         "when": "workspace"
       },
       {
         "id": "slot-6",
-        "title": "Toolkit for Orca: Open Slot 6",
+        "title": "F-Keys for Orca: Open Slot 6",
         "when": "workspace"
       },
       {
         "id": "slot-7",
-        "title": "Toolkit for Orca: Open Slot 7",
+        "title": "F-Keys for Orca: Open Slot 7",
         "when": "workspace"
       },
       {
         "id": "slot-8",
-        "title": "Toolkit for Orca: Open Slot 8",
+        "title": "F-Keys for Orca: Open Slot 8",
         "when": "workspace"
       },
       {
         "id": "slot-9",
-        "title": "Toolkit for Orca: Open Slot 9",
+        "title": "F-Keys for Orca: Open Slot 9",
         "when": "workspace"
       },
       {
         "id": "slot-10",
-        "title": "Toolkit for Orca: Open Slot 10",
+        "title": "F-Keys for Orca: Open Slot 10",
         "when": "workspace"
       },
       {
         "id": "slot-11",
-        "title": "Toolkit for Orca: Open Slot 11",
+        "title": "F-Keys for Orca: Open Slot 11",
         "when": "workspace"
       },
       {
         "id": "slot-12",
-        "title": "Toolkit for Orca: Open Slot 12",
+        "title": "F-Keys for Orca: Open Slot 12",
         "when": "workspace"
       },
       {
         "id": "show",
-        "title": "Toolkit for Orca: Show Slots",
+        "title": "F-Keys for Orca: Show Slots",
         "when": "global"
       }
     ],

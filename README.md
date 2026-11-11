@@ -1,4 +1,4 @@
-# Toolkit for Orca
+# F-Keys for Orca
 
 An installable community plugin for the [Orca](https://orca.dev) agent terminal, plus optional
 macOS tools for people who run several Claude Code / Codex / Antigravity / Grok accounts side by
@@ -7,14 +7,14 @@ side. Not affiliated with or endorsed by Orca or Stably.
 ## Install the Orca plugin
 
 ```sh
-orca plugin install brezzashen/orca-toolkit@v0.2.1 --json
+orca plugin install brezzashen/orca-toolkit@v0.2.2 --json
 ```
 
 Review the permissions shown by Orca, then approve that exact plugin in **Settings → Plugins**
 or with the approval command Orca prints. You can also install the repository URL from Settings.
 Requires Orca **1.4.248 or newer**; tested on macOS with Orca 1.4.256.
 
-The plugin starts with **no configured commands**. Open the **Toolkit for Orca** right-sidebar panel,
+The plugin starts with **no configured commands**. Open the **F-Keys for Orca** right-sidebar panel,
 expand **Edit all slots**, and write up to twelve lines as `label | command`:
 
 ```text
@@ -24,10 +24,10 @@ Codex | CODEX_HOME=~/.codex-work codex
 Antigravity | agy
 ```
 
-Press **Save slots**. A panel row, **Toolkit for Orca: Open Slot N** in the command palette, or
+Press **Save slots**. A panel row, **F-Keys for Orca: Open Slot N** in the command palette, or
 `Alt+F1`–`Alt+F12` opens a new terminal in the focused workspace and runs that slot's command.
 Empty slots are disabled. The terminal opens in the background. The **Accounts** status-bar
-item lists configured slots. Slots can also be edited in **Settings → Plugins → Toolkit for Orca**.
+item lists configured slots. Slots can also be edited in **Settings → Plugins → F-Keys for Orca**.
 
 The plugin uses Orca's public Host API 1. It reads the workspace and agent events, opens the
 workspace and a terminal, saves its own settings, and shows notifications. Its trusted worker
