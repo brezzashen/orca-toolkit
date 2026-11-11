@@ -2,3 +2,4 @@ node_modules/
 automation/target/
 *.log
 .DS_Store
+.orca/

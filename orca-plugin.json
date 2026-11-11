@@ -1,0 +1,366 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
+  "manifestVersion": 2,
+  "id": "toolkit",
+  "name": "Orca Toolkit",
+  "version": "0.2.0",
+  "description": "Twelve account slots: Alt+F1 to Alt+F12, the palette or the sidebar panel open a new terminal tab in the focused workspace that runs the slot’s own command, such as an agent CLI on its own account profile.",
+  "icon": "assets/plugin-icon.png",
+  "license": "MIT",
+  "engines": {
+    "orca": ">=1.4.248"
+  },
+  "execution": "trusted-worker",
+  "pluginApi": 1,
+  "main": "plugin/worker.ts",
+  "capabilities": [
+    {
+      "kind": "workspace:read"
+    },
+    {
+      "kind": "workspace:write"
+    },
+    {
+      "kind": "terminal:send"
+    },
+    {
+      "kind": "agent:read"
+    },
+    {
+      "kind": "settings:own"
+    },
+    {
+      "kind": "notifications:show"
+    }
+  ],
+  "contributes": {
+    "panels": [
+      {
+        "id": "slots",
+        "title": "Orca Toolkit",
+        "icon": "terminal",
+        "entry": "plugin/panel.tsx",
+        "ui": "components"
+      }
+    ],
+    "statusBarItems": [
+      {
+        "id": "slots",
+        "text": "Accounts",
+        "icon": "terminal",
+        "tooltip": "Orca Toolkit: list the slots",
+        "command": "show"
+      }
+    ],
+    "commands": [
+      {
+        "id": "slot-1",
+        "title": "Orca Toolkit: Open Slot 1",
+        "when": "workspace"
+      },
+      {
+        "id": "slot-2",
+        "title": "Orca Toolkit: Open Slot 2",
+        "when": "workspace"
+      },
+      {
+        "id": "slot-3",
+        "title": "Orca Toolkit: Open Slot 3",
+        "when": "workspace"
+      },
+      {
+        "id": "slot-4",
+        "title": "Orca Toolkit: Open Slot 4",
+        "when": "workspace"
+      },
+      {
+        "id": "slot-5",
+        "title": "Orca Toolkit: Open Slot 5",
+        "when": "workspace"
+      },
+      {
+        "id": "slot-6",
+        "title": "Orca Toolkit: Open Slot 6",
+        "when": "workspace"
+      },
+      {
+        "id": "slot-7",
+        "title": "Orca Toolkit: Open Slot 7",
+        "when": "workspace"
+      },
+      {
+        "id": "slot-8",
+        "title": "Orca Toolkit: Open Slot 8",
+        "when": "workspace"
+      },
+      {
+        "id": "slot-9",
+        "title": "Orca Toolkit: Open Slot 9",
+        "when": "workspace"
+      },
+      {
+        "id": "slot-10",
+        "title": "Orca Toolkit: Open Slot 10",
+        "when": "workspace"
+      },
+      {
+        "id": "slot-11",
+        "title": "Orca Toolkit: Open Slot 11",
+        "when": "workspace"
+      },
+      {
+        "id": "slot-12",
+        "title": "Orca Toolkit: Open Slot 12",
+        "when": "workspace"
+      },
+      {
+        "id": "show",
+        "title": "Orca Toolkit: Show Slots",
+        "when": "global"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "slot-1",
+        "key": "Alt+F1",
+        "when": "workspace"
+      },
+      {
+        "command": "slot-2",
+        "key": "Alt+F2",
+        "when": "workspace"
+      },
+      {
+        "command": "slot-3",
+        "key": "Alt+F3",
+        "when": "workspace"
+      },
+      {
+        "command": "slot-4",
+        "key": "Alt+F4",
+        "when": "workspace"
+      },
+      {
+        "command": "slot-5",
+        "key": "Alt+F5",
+        "when": "workspace"
+      },
+      {
+        "command": "slot-6",
+        "key": "Alt+F6",
+        "when": "workspace"
+      },
+      {
+        "command": "slot-7",
+        "key": "Alt+F7",
+        "when": "workspace"
+      },
+      {
+        "command": "slot-8",
+        "key": "Alt+F8",
+        "when": "workspace"
+      },
+      {
+        "command": "slot-9",
+        "key": "Alt+F9",
+        "when": "workspace"
+      },
+      {
+        "command": "slot-10",
+        "key": "Alt+F10",
+        "when": "workspace"
+      },
+      {
+        "command": "slot-11",
+        "key": "Alt+F11",
+        "when": "workspace"
+      },
+      {
+        "command": "slot-12",
+        "key": "Alt+F12",
+        "when": "workspace"
+      }
+    ],
+    "settings": [
+      {
+        "key": "slot1.label",
+        "title": "Slot 1 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F1).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot1.command",
+        "title": "Slot 1 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot2.label",
+        "title": "Slot 2 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F2).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot2.command",
+        "title": "Slot 2 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot3.label",
+        "title": "Slot 3 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F3).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot3.command",
+        "title": "Slot 3 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot4.label",
+        "title": "Slot 4 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F4).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot4.command",
+        "title": "Slot 4 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot5.label",
+        "title": "Slot 5 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F5).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot5.command",
+        "title": "Slot 5 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot6.label",
+        "title": "Slot 6 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F6).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot6.command",
+        "title": "Slot 6 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot7.label",
+        "title": "Slot 7 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F7).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot7.command",
+        "title": "Slot 7 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot8.label",
+        "title": "Slot 8 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F8).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot8.command",
+        "title": "Slot 8 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot9.label",
+        "title": "Slot 9 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F9).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot9.command",
+        "title": "Slot 9 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot10.label",
+        "title": "Slot 10 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F10).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot10.command",
+        "title": "Slot 10 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot11.label",
+        "title": "Slot 11 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F11).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot11.command",
+        "title": "Slot 11 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot12.label",
+        "title": "Slot 12 label",
+        "description": "Name shown in the panel and used as the new terminal title (Alt+F12).",
+        "type": "string",
+        "default": ""
+      },
+      {
+        "key": "slot12.command",
+        "title": "Slot 12 command",
+        "description": "Command the new terminal runs in the workspace host’s shell, e.g. CLAUDE_CONFIG_DIR=~/.claude-work claude. Empty turns the slot off.",
+        "type": "string",
+        "default": ""
+      }
+    ],
+    "events": [
+      {
+        "on": "agent.status.changed"
+      }
+    ]
+  },
+  "repository": "https://github.com/brezzashen/orca-toolkit",
+  "homepage": "https://github.com/brezzashen/orca-toolkit",
+  "author": {
+    "name": "brezzashen",
+    "url": "https://github.com/brezzashen"
+  }
+}

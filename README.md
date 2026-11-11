@@ -1,7 +1,75 @@
 # Orca Toolkit
 
-Unofficial add-ons for the [Orca](https://orca.dev) agent terminal on macOS, for people who run
-several Claude Code / Codex / Antigravity / Grok accounts side by side. Not affiliated with Orca or Stably.
+An installable community plugin for the [Orca](https://orca.dev) agent terminal, plus optional
+macOS tools for people who run several Claude Code / Codex / Antigravity / Grok accounts side by
+side. Not affiliated with or endorsed by Orca or Stably.
+
+## Install the Orca plugin
+
+```sh
+orca plugin install brezzashen/orca-toolkit@v0.2.0 --json
+```
+
+Review the permissions shown by Orca, then approve that exact plugin in **Settings → Plugins**
+or with the approval command Orca prints. You can also install the repository URL from Settings.
+Requires Orca **1.4.248 or newer**; tested on macOS with Orca 1.4.256.
+
+The plugin starts with **no configured commands**. Open the **Orca Toolkit** right-sidebar panel,
+expand **Edit all slots**, and write up to twelve lines as `label | command`:
+
+```text
+Claude Work | CLAUDE_CONFIG_DIR=~/.claude-work claude
+Claude Personal | claude
+Codex | CODEX_HOME=~/.codex-work codex
+Antigravity | agy
+```
+
+Press **Save slots**. A panel row, **Orca Toolkit: Open Slot N** in the command palette, or
+`Alt+F1`–`Alt+F12` opens a new terminal in the focused workspace and runs that slot's command.
+Empty slots are disabled. The terminal opens in the background. The **Accounts** status-bar
+item lists configured slots. Slots can also be edited in **Settings → Plugins → Orca Toolkit**.
+
+The plugin uses Orca's public Host API 1. It reads the workspace and agent events, opens the
+workspace and a terminal, saves its own settings, and shows notifications. Its trusted worker
+runs with your user account's access. Only configure shell commands you trust; keep credentials
+out of those commands. It never reads account tokens or installs the optional tools below.
+
+### Current limits
+
+- Plain F1–F12 require the optional native key tool; plugin shortcuts need a modifier. Rebind
+  conflicts in Orca's shortcut settings. Do not enable both this plugin and the older Account
+  Keys plugin with the same shortcuts.
+- Paired desktops showing another host's workspace may report no focused workspace
+  ([orca#40723](https://github.com/stablyai/orca/issues/40723)). This plugin does not patch the
+  client to work around it. Paired desktop workspaces and browser clients are not supported by
+  this release; use the host desktop app.
+- The plugin calls `workspace.open` after `terminal.create` to make Orca adopt the new terminal
+  as a visible tab ([orca#40721](https://github.com/stablyai/orca/issues/40721)).
+- Quota collection, original-account session restore, native Chat UI integration, remote image
+  uploads and ghost-tab repair remain optional local tools. They are not enabled by installing
+  the plugin. The plugin does not promise to switch a terminal into Orca's native Chat UI.
+
+### Develop and verify the plugin
+
+```sh
+orca plugin types . --json
+npm run typecheck:plugin
+npm run test:plugin
+npm run check:plugin
+orca plugin dev load . --json
+```
+
+If a development worker reports a content hash mismatch after Orca writes `.orca/types`, unload
+the development folder before loading it again. For release acceptance, install the committed
+version from Git; a successful development preview alone is not an installation test.
+
+See [`plugin/README.md`](plugin/README.md) for the module boundary and tests. All existing
+toolkit commands and tests below remain available.
+
+## Optional local tools (macOS)
+
+The sections below install native launchers, shell integration and optional compatibility
+patches. They are separate from the Orca plugin and require their own setup.
 
 ## Set it up with your agent
 
